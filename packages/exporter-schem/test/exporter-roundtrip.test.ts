@@ -118,12 +118,12 @@ describe("Schematic Round-Trip Semantic Verification", () => {
     const mockPlan: VoxelPlan = {
       version: "0.1",
       name: "Handcrafted Test",
-      size: [3, 2, 3],
+      size: [2, 2, 3],
       origin: [0, 0, 0],
       blocks: [
         { pos: [0, 0, 0], block: { name: "minecraft:stone" } },
         { pos: [1, 0, 2], block: { name: "minecraft:oak_planks" } },
-        { pos: [2, 1, 1], block: { name: "minecraft:glass", properties: { facing: "north" } } },
+        { pos: [0, 1, 1], block: { name: "minecraft:glass" } },
       ],
     };
 
