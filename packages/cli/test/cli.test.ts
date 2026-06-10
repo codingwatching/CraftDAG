@@ -6,6 +6,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 describe("CLI Integration", () => {
   const cliPath = path.resolve(__dirname, "../dist/index.js");
   const tempJsonPath = path.resolve(__dirname, "temp-test.json");
+  const tempSchemPath = path.resolve(__dirname, "temp-test.schem");
 
   const validDoc = {
     version: "0.1",
@@ -31,6 +32,9 @@ describe("CLI Integration", () => {
   afterAll(() => {
     if (fs.existsSync(tempJsonPath)) {
       fs.unlinkSync(tempJsonPath);
+    }
+    if (fs.existsSync(tempSchemPath)) {
+      fs.unlinkSync(tempSchemPath);
     }
   });
 
@@ -59,5 +63,12 @@ describe("CLI Integration", () => {
     expect(output).toContain("Layer-by-Layer Guide for \"CLI Test House\":");
     expect(output).toContain("Layer Y = 0");
     expect(output).toContain("Layer Y = 1");
+  });
+
+  it("should export to Sponge schematic using options", () => {
+    const output = execSync(`node ${cliPath} export ${tempJsonPath} --format schem --out ${tempSchemPath}`).toString();
+    expect(output).toContain("✓ Sponge schematic exported successfully to");
+    expect(fs.existsSync(tempSchemPath)).toBe(true);
+    expect(fs.statSync(tempSchemPath).size).toBeGreaterThan(0);
   });
 });

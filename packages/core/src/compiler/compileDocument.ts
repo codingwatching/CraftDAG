@@ -1,7 +1,7 @@
 import { CompileError } from "../errors.js";
 import { sortNodes } from "../graph.js";
 import { validateDocument } from "../schema.js";
-import { CraftDagDocument, VoxelPlan } from "../types.js";
+import { VoxelPlan } from "../types.js";
 import { VoxelGrid } from "../voxel/VoxelGrid.js";
 import { compileSolidBox } from "./primitives/solidBox.js";
 import { compileFloor } from "./primitives/floor.js";
@@ -15,7 +15,7 @@ import { compileGableRoof } from "./primitives/gableRoof.js";
 /**
  * Validates, topologically sorts, and compiles a CraftDAG document into a VoxelPlan.
  */
-export function compileDocument(doc: CraftDagDocument): VoxelPlan {
+export function compileDocument(doc: unknown): VoxelPlan {
   // Validate schema and references first
   const validatedDoc = validateDocument(doc);
 
@@ -52,9 +52,10 @@ export function compileDocument(doc: CraftDagDocument): VoxelPlan {
       case "GableRoof":
         compileGableRoof(node, grid, validatedDoc);
         break;
-      default:
+      default: {
         const _exhaustiveCheck: never = node;
         throw new CompileError(`Unhandled node type: ${(_exhaustiveCheck as any).type}`);
+      }
     }
   }
 

@@ -25,8 +25,10 @@ export function compileGableRoof(
       } else {
         distFromEdge = Math.min(x - minX, maxX - x);
       }
-      const y = Math.min(minY + distFromEdge, maxY);
-      grid.setBlock([x, y, z], blockState, node.id);
+      const peakY = Math.min(minY + distFromEdge, maxY);
+      for (let y = minY; y <= peakY; y++) {
+        grid.setBlock([x, y, z], blockState, node.id);
+      }
     }
   }
 }
