@@ -31,6 +31,8 @@ const HollowBoxNodeSchema = z.object({
     from: Vec3Schema,
     to: Vec3Schema,
     block: z.string().min(1),
+    includeFloor: z.boolean().optional(),
+    includeCeiling: z.boolean().optional(),
   }).strict(),
 }).strict();
 

@@ -7,7 +7,7 @@ export function compileHollowBox(
   grid: VoxelGrid,
   doc: CraftDagDocument
 ): void {
-  const { from, to, block } = node.params;
+  const { from, to, block, includeFloor = true, includeCeiling = true } = node.params;
   const blockState = resolveBlock(block, doc.palette);
 
   const minX = Math.min(from[0], to[0]);
@@ -23,8 +23,8 @@ export function compileHollowBox(
         const isShell =
           x === minX ||
           x === maxX ||
-          y === minY ||
-          y === maxY ||
+          (y === minY && includeFloor) ||
+          (y === maxY && includeCeiling) ||
           z === minZ ||
           z === maxZ;
         if (isShell) {

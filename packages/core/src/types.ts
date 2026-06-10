@@ -27,6 +27,8 @@ export interface HollowBoxParams {
   from: Vec3;
   to: Vec3;
   block: string;
+  includeFloor?: boolean;
+  includeCeiling?: boolean;
 }
 export type HollowBoxNode = BaseNode<"HollowBox", HollowBoxParams>;
 

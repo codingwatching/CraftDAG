@@ -149,12 +149,12 @@ describe("Compilers Batch 2 (HollowBox, Doorway, Window, GableRoof)", () => {
     // distFromEdge for Z=1,3 is 1 => Y = minY + 1 = 1
     // distFromEdge for Z=2 is 2 => Y = minY + 2 = 2
     const planX = compileDocument(docX);
-    expect(planX.blocks.length).toBe(5);
-    expect(planX.blocks.find(b => b.pos[2] === 0)?.pos[1]).toBe(0);
-    expect(planX.blocks.find(b => b.pos[2] === 4)?.pos[1]).toBe(0);
-    expect(planX.blocks.find(b => b.pos[2] === 1)?.pos[1]).toBe(1);
-    expect(planX.blocks.find(b => b.pos[2] === 3)?.pos[1]).toBe(1);
-    expect(planX.blocks.find(b => b.pos[2] === 2)?.pos[1]).toBe(2);
+    expect(planX.blocks.length).toBe(9);
+    expect(planX.blocks.find(b => b.pos[2] === 0 && b.pos[1] === 0)).toBeDefined();
+    expect(planX.blocks.find(b => b.pos[2] === 4 && b.pos[1] === 0)).toBeDefined();
+    expect(planX.blocks.find(b => b.pos[2] === 1 && b.pos[1] === 1)).toBeDefined();
+    expect(planX.blocks.find(b => b.pos[2] === 3 && b.pos[1] === 1)).toBeDefined();
+    expect(planX.blocks.find(b => b.pos[2] === 2 && b.pos[1] === 2)).toBeDefined();
 
     const docZ: CraftDagDocument = {
       ...baseDoc,
@@ -172,11 +172,11 @@ describe("Compilers Batch 2 (HollowBox, Doorway, Window, GableRoof)", () => {
       ],
     };
     const planZ = compileDocument(docZ);
-    expect(planZ.blocks.length).toBe(5);
-    expect(planZ.blocks.find(b => b.pos[0] === 0)?.pos[1]).toBe(0);
-    expect(planZ.blocks.find(b => b.pos[0] === 4)?.pos[1]).toBe(0);
-    expect(planZ.blocks.find(b => b.pos[0] === 1)?.pos[1]).toBe(1);
-    expect(planZ.blocks.find(b => b.pos[0] === 3)?.pos[1]).toBe(1);
-    expect(planZ.blocks.find(b => b.pos[0] === 2)?.pos[1]).toBe(2);
+    expect(planZ.blocks.length).toBe(9);
+    expect(planZ.blocks.find(b => b.pos[0] === 0 && b.pos[1] === 0)).toBeDefined();
+    expect(planZ.blocks.find(b => b.pos[0] === 4 && b.pos[1] === 0)).toBeDefined();
+    expect(planZ.blocks.find(b => b.pos[0] === 1 && b.pos[1] === 1)).toBeDefined();
+    expect(planZ.blocks.find(b => b.pos[0] === 3 && b.pos[1] === 1)).toBeDefined();
+    expect(planZ.blocks.find(b => b.pos[0] === 2 && b.pos[1] === 2)).toBeDefined();
   });
 });

@@ -124,14 +124,18 @@ program
   .command("export")
   .description("Export a CraftDAG plan to Sponge schematic (.schem) format")
   .argument("<file>", "path to the CraftDAG JSON file")
-  .argument("<outputFile>", "path to save the .schem file")
-  .action((file, outputFile) => {
+  .option("-f, --format <format>", "export format (default: schem)", "schem")
+  .requiredOption("-o, --out <outputFile>", "path to save the exported file")
+  .action((file, options) => {
     const doc = readJsonFile(file);
     try {
+      if (options.format !== "schem") {
+        throw new Error(`Unsupported export format: ${options.format}`);
+      }
       const plan = compileDocument(doc);
       const buffer = exportToSchematic(plan);
-      fs.writeFileSync(path.resolve(outputFile), buffer);
-      console.log(`✓ Sponge schematic exported successfully to ${outputFile}`);
+      fs.writeFileSync(path.resolve(options.out), buffer);
+      console.log(`✓ Sponge schematic exported successfully to ${options.out}`);
     } catch (err: any) {
       console.error(`✗ Export error: ${err.message}`);
       process.exit(1);
