@@ -601,12 +601,13 @@ function scaledRoofBox(
   }
 
   const slopeSpan = component.placement.direction === "z" ? maxX - minX : maxZ - minZ;
-  const logicalRoofHeight = Math.max(1, Math.ceil(slopeSpan / 2));
-  const maxY = Math.min(bounds.height, baseY + logicalRoofHeight);
+  const scaledSlopeSpan = slopeSpan * unit;
+  const scaledRoofHeight = Math.max(1, Math.ceil(scaledSlopeSpan / 2));
+  const scaledMaxY = Math.min(bounds.height * unit, baseY * unit + scaledRoofHeight);
 
   return {
     from: [minX * unit, baseY * unit, minZ * unit],
-    to: [maxX * unit - 1, maxY * unit - 1, maxZ * unit - 1],
+    to: [maxX * unit - 1, scaledMaxY - 1, maxZ * unit - 1],
   };
 }
 

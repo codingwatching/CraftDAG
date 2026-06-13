@@ -150,6 +150,49 @@ describe("ComponentPlan", () => {
     });
   });
 
+  it("calculates scaled gable roof height from the scaled slope span", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Odd Span Roof",
+      grid: { unitBlocks: 2 },
+      bounds: { width: 5, height: 10, length: 5 },
+      palette: {
+        wall: "minecraft:oak_planks",
+        roof: "minecraft:spruce_planks",
+      },
+      components: [
+        {
+          id: "room",
+          type: "RoomShell",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 5, height: 1, length: 5 },
+          },
+        },
+        {
+          id: "roof",
+          type: "GableRoof",
+          inputs: [{ ref: "room" }],
+          placement: {
+            over: "room",
+            direction: "x",
+          },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const roof = craftDag.nodes.find((node) => node.id === "roof__gable");
+
+    expect(roof).toMatchObject({
+      type: "GableRoof",
+      params: {
+        from: [0, 2, 0],
+        to: [9, 6, 9],
+      },
+    });
+  });
+
   it("compiles a ComponentPlan through the existing CraftDAG compiler", () => {
     const voxelPlan = compileComponentPlan(starterCabin);
 
