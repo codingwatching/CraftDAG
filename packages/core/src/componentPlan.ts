@@ -695,9 +695,29 @@ function estimateComponentBlocks(
     case "Foundation":
     case "Platform":
     case "Beam":
-    case "RoomShell":
     case "SupportPost":
       return componentVolume(component.placement.size) * unit * unit * unit;
+    case "RoomShell": {
+      const size = component.placement.size;
+      const W = size.width * unit;
+      const H = size.height * unit;
+      const L = size.length * unit;
+
+      const includeFloor = component.options?.includeFloor ?? true;
+      const includeCeiling = component.options?.includeCeiling ?? true;
+
+      const innerW = Math.max(0, W - 2);
+      const innerL = Math.max(0, L - 2);
+
+      let ySubtract = 0;
+      if (includeFloor) ySubtract += 1;
+      if (includeCeiling) ySubtract += 1;
+      const innerH = Math.max(0, H - ySubtract);
+
+      const innerVolume = innerW * innerH * innerL;
+      const totalVolume = W * H * L;
+      return totalVolume - innerVolume;
+    }
     case "Door":
     case "Window":
     case "Opening":
@@ -923,7 +943,7 @@ function expandRepeat(
       placement: shiftAnchoredPlacement(source.placement, component.placement.axis, component.placement.step * index),
     } as RepeatableComponent;
 
-    nodes.push(expandRepeatableComponent(shifted, source, componentMap, unit));
+    nodes.push(expandRepeatableComponent(shifted, source, component, componentMap, unit));
   }
 
   return nodes;
@@ -932,13 +952,18 @@ function expandRepeat(
 function expandRepeatableComponent(
   repeated: RepeatableComponent,
   source: RepeatableComponent,
+  repeatComponent: Extract<ComponentNode, { type: "Repeat" }>,
   componentMap: Map<string, ComponentNode>,
   unit: 1 | 2
 ): CraftDagNode {
-  const inputs = [
-    ...expandInputs(source, componentMap),
-    { ref: nodeId(source.id, outputPart(source)) },
-  ];
+  const inputsMap = new Map<string, { ref: string }>();
+  for (const input of expandInputs(source, componentMap)) {
+    inputsMap.set(input.ref, input);
+  }
+  for (const input of expandInputs(repeatComponent, componentMap)) {
+    inputsMap.set(input.ref, input);
+  }
+  const inputs = [...inputsMap.values()];
 
   switch (repeated.type) {
     case "Foundation":

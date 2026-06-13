@@ -978,4 +978,93 @@ describe("ComponentPlan", () => {
       ]);
     }
   });
+
+  it("estimates RoomShell blocks as hollow volume and does not exceed budget", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Hollow Room shell Budget",
+      policy: { sizeTier: "small" },
+      bounds: { width: 32, height: 16, length: 32 },
+      palette: {
+        wall: "minecraft:oak_planks",
+      },
+      components: [
+        {
+          id: "hall",
+          type: "RoomShell",
+          placement: {
+            anchor: { x: 2, y: 0, z: 2 },
+            size: { width: 28, height: 8, length: 28 },
+          },
+          options: {
+            includeFloor: false,
+            includeCeiling: false,
+          },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(plan)).not.toThrow();
+  });
+
+  it("passes down Repeat explicit inputs to all repeated clones", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Explicit Inputs",
+      bounds: { width: 10, height: 5, length: 10 },
+      palette: {
+        trim: "minecraft:oak_log",
+      },
+      components: [
+        {
+          id: "base_beam",
+          type: "Beam",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 10, height: 1, length: 1 },
+          },
+        },
+        {
+          id: "support",
+          type: "SupportPost",
+          placement: {
+            anchor: { x: 0, y: 1, z: 0 },
+            size: { width: 1, height: 4, length: 1 },
+          },
+        },
+        {
+          id: "support_run",
+          type: "Repeat",
+          inputs: [{ ref: "base_beam" }],
+          placement: {
+            source: "support",
+            axis: "x",
+            count: 3,
+            step: 4,
+          },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+
+    const clone1 = craftDag.nodes.find((n) => n.id === "support_run__support_1__post");
+    const clone2 = craftDag.nodes.find((n) => n.id === "support_run__support_2__post");
+
+    expect(clone1).toBeDefined();
+    expect(clone2).toBeDefined();
+
+    expect(clone1!.inputs).toEqual(
+      expect.arrayContaining([
+        { ref: "base_beam__beam" },
+        { ref: "support__post" },
+      ])
+    );
+    expect(clone2!.inputs).toEqual(
+      expect.arrayContaining([
+        { ref: "base_beam__beam" },
+        { ref: "support__post" },
+      ])
+    );
+  });
 });
