@@ -186,7 +186,7 @@ Agents should not calculate raw `from` and `to` coordinates for attached compone
   "version": "0.1",
   "name": "Starter Cabin",
   "grid": { "unitBlocks": 1 },
-  "bounds": { "width": 7, "height": 6, "length": 7 },
+  "bounds": { "width": 9, "height": 8, "length": 9 },
   "palette": {
     "foundation": "minecraft:cobblestone",
     "wall": "minecraft:oak_planks",
@@ -200,7 +200,7 @@ Agents should not calculate raw `from` and `to` coordinates for attached compone
       "type": "Foundation",
       "placement": {
         "anchor": { "x": 0, "y": 0, "z": 0 },
-        "size": { "width": 7, "height": 1, "length": 7 }
+        "size": { "width": 9, "height": 1, "length": 9 }
       },
       "materials": { "main": "foundation" }
     },
@@ -209,7 +209,7 @@ Agents should not calculate raw `from` and `to` coordinates for attached compone
       "type": "RoomShell",
       "inputs": [{ "ref": "foundation" }],
       "placement": {
-        "anchor": { "x": 0, "y": 1, "z": 0 },
+        "anchor": { "x": 1, "y": 1, "z": 1 },
         "size": { "width": 7, "height": 3, "length": 7 }
       },
       "materials": { "wall": "wall" },

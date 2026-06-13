@@ -13,7 +13,7 @@ describe("ComponentPlan", () => {
     version: "0.1",
     name: "Starter Cabin",
     grid: { unitBlocks: 1 },
-    bounds: { width: 7, height: 6, length: 7 },
+    bounds: { width: 7, height: 8, length: 7 },
     palette: {
       foundation: "minecraft:cobblestone",
       wall: "minecraft:oak_planks",
@@ -88,7 +88,7 @@ describe("ComponentPlan", () => {
   it("expands components to stable CraftDAG node IDs", () => {
     const craftDag = expandComponentPlan(starterCabin);
 
-    expect(craftDag.size).toEqual([7, 6, 7]);
+    expect(craftDag.size).toEqual([7, 8, 7]);
     expect(craftDag.nodes.map((node) => node.id)).toEqual([
       "foundation__solid",
       "main_room__shell",
@@ -133,7 +133,7 @@ describe("ComponentPlan", () => {
     const foundation = craftDag.nodes[0];
     const door = craftDag.nodes.find((node) => node.id === "front_door__opening");
 
-    expect(craftDag.size).toEqual([14, 12, 14]);
+    expect(craftDag.size).toEqual([14, 16, 14]);
     expect(foundation).toMatchObject({
       type: "SolidBox",
       params: {
@@ -191,6 +191,41 @@ describe("ComponentPlan", () => {
         to: [9, 6, 9],
       },
     });
+  });
+
+  it("keeps roof overhang symmetric when bounds limit the requested overhang", () => {
+    const craftDag = expandComponentPlan(starterCabin);
+    const roof = craftDag.nodes.find((node) => node.id === "roof__gable");
+
+    expect(roof).toMatchObject({
+      type: "GableRoof",
+      params: {
+        from: [0, 4, 0],
+        to: [6, 7, 6],
+      },
+    });
+  });
+
+  it("rejects roofs that exceed height bounds instead of truncating them", () => {
+    const invalid: ComponentPlanDocument = {
+      ...starterCabin,
+      bounds: { ...starterCabin.bounds, height: 6 },
+    };
+
+    expect(() => validateComponentPlan(invalid)).toThrow(ValidationError);
+
+    try {
+      validateComponentPlan(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          stage: "component-validation",
+          code: "ROOF_HEIGHT_OUT_OF_BOUNDS",
+          componentId: "roof",
+        }),
+      ]);
+    }
   });
 
   it("compiles a ComponentPlan through the existing CraftDAG compiler", () => {

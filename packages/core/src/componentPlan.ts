@@ -194,6 +194,7 @@ export function validateComponentPlan(doc: unknown): ComponentPlanDocument {
 
   validateComponentGraph(parsed);
   validateAttachments(parsed, componentMap);
+  validateCovers(parsed, componentMap);
 
   return parsed;
 }
@@ -427,6 +428,45 @@ function validateAttachments(plan: ComponentPlanDocument, componentMap: Map<stri
   }
 }
 
+function validateCovers(plan: ComponentPlanDocument, componentMap: Map<string, ComponentNode>): void {
+  const unit = plan.grid?.unitBlocks ?? 1;
+
+  for (const component of plan.components) {
+    if (component.type !== "GableRoof") {
+      continue;
+    }
+
+    const target = componentMap.get(component.placement.over);
+    if (!target || !isAnchoredComponent(target)) {
+      throw componentValidationError({
+        code: "INVALID_COVER_TARGET",
+        componentId: component.id,
+        message: `GableRoof "${component.id}" must cover an anchored component.`,
+        repairHint: "Set placement.over to a RoomShell or another anchored component.",
+      });
+    }
+
+    const geometry = roofGeometry(component, target, plan.bounds, unit);
+    if (geometry.baseY >= plan.bounds.height) {
+      throw componentValidationError({
+        code: "COVER_OUT_OF_BOUNDS",
+        componentId: component.id,
+        message: `GableRoof "${component.id}" starts outside ComponentPlan height bounds.`,
+        repairHint: "Increase bounds.height or lower the covered component.",
+      });
+    }
+
+    if (geometry.scaledMaxY > plan.bounds.height * unit) {
+      throw componentValidationError({
+        code: "ROOF_HEIGHT_OUT_OF_BOUNDS",
+        componentId: component.id,
+        message: `GableRoof "${component.id}" exceeds ComponentPlan height bounds.`,
+        repairHint: "Increase bounds.height, reduce the covered span, or remove roof overhang.",
+      });
+    }
+  }
+}
+
 function validateComponentMaterials(plan: ComponentPlanDocument, component: ComponentNode): void {
   for (const value of Object.values(component.materials ?? {})) {
     if (!isKnownBlockRef(plan, value)) {
@@ -585,30 +625,40 @@ function scaledRoofBox(
     });
   }
 
-  const overhang = component.placement.overhang ?? 0;
-  const minX = Math.max(0, target.placement.anchor.x - overhang);
-  const minZ = Math.max(0, target.placement.anchor.z - overhang);
-  const maxX = Math.min(bounds.width, target.placement.anchor.x + target.placement.size.width + overhang);
-  const maxZ = Math.min(bounds.length, target.placement.anchor.z + target.placement.size.length + overhang);
-  const baseY = target.placement.anchor.y + target.placement.size.height;
-  if (baseY >= bounds.height) {
-    throw componentValidationError({
-      code: "COVER_OUT_OF_BOUNDS",
-      componentId: component.id,
-      message: `GableRoof "${component.id}" starts outside ComponentPlan height bounds.`,
-      repairHint: "Increase bounds.height or lower the covered component.",
-    });
-  }
+  const geometry = roofGeometry(component, target, bounds, unit);
 
+  return {
+    from: [geometry.minX * unit, geometry.baseY * unit, geometry.minZ * unit],
+    to: [geometry.maxX * unit - 1, geometry.scaledMaxY - 1, geometry.maxZ * unit - 1],
+  };
+}
+
+function roofGeometry(
+  component: Extract<ComponentNode, { type: "GableRoof" }>,
+  target: AnchoredComponent,
+  bounds: ComponentSize,
+  unit: 1 | 2
+) {
+  const requestedOverhang = component.placement.overhang ?? 0;
+  const maxSymmetricOverhang = Math.min(
+    requestedOverhang,
+    target.placement.anchor.x,
+    target.placement.anchor.z,
+    bounds.width - (target.placement.anchor.x + target.placement.size.width),
+    bounds.length - (target.placement.anchor.z + target.placement.size.length)
+  );
+  const overhang = Math.max(0, maxSymmetricOverhang);
+  const minX = target.placement.anchor.x - overhang;
+  const minZ = target.placement.anchor.z - overhang;
+  const maxX = target.placement.anchor.x + target.placement.size.width + overhang;
+  const maxZ = target.placement.anchor.z + target.placement.size.length + overhang;
+  const baseY = target.placement.anchor.y + target.placement.size.height;
   const slopeSpan = component.placement.direction === "z" ? maxX - minX : maxZ - minZ;
   const scaledSlopeSpan = slopeSpan * unit;
   const scaledRoofHeight = Math.max(1, Math.ceil(scaledSlopeSpan / 2));
-  const scaledMaxY = Math.min(bounds.height * unit, baseY * unit + scaledRoofHeight);
+  const scaledMaxY = baseY * unit + scaledRoofHeight;
 
-  return {
-    from: [minX * unit, baseY * unit, minZ * unit],
-    to: [maxX * unit - 1, scaledMaxY - 1, maxZ * unit - 1],
-  };
+  return { minX, minZ, maxX, maxZ, baseY, scaledMaxY };
 }
 
 function isAnchoredComponent(component: ComponentNode): component is AnchoredComponent {
