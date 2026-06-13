@@ -48,6 +48,7 @@ type ComponentPlanDocument = {
   version: "0.1"
   name: string
   grid?: ComponentGrid
+  policy?: ComponentPlanPolicy
   bounds: ComponentSize
   palette: ComponentPalette
   components: ComponentNode[]
@@ -55,6 +56,10 @@ type ComponentPlanDocument = {
 
 type ComponentGrid = {
   unitBlocks?: 1 | 2
+}
+
+type ComponentPlanPolicy = {
+  sizeTier?: "small" | "medium" | "large"
 }
 
 type ComponentSize = {
@@ -77,6 +82,22 @@ type ComponentPalette = {
 All sizes and offsets in ComponentPlan are logical units. The expander converts logical units to Minecraft block coordinates.
 
 `grid.unitBlocks` defaults to `1`. In v0.1, the engine should support `1` and `2` only.
+
+## Budget Policy
+
+`policy.sizeTier` defaults to `"small"`.
+
+The validator rejects plans that exceed the active tier before expansion or compilation. Budgets are deliberately conservative so MinePilot and other agent workflows can ask for a repair before rendering an impractical plan.
+
+| Tier | Max logical bounds | Max components | Max estimated expanded blocks |
+| --- | --- | ---: | ---: |
+| `small` | `32 x 32 x 32` | 64 | 32,768 |
+| `medium` | `64 x 48 x 64` | 256 | 196,608 |
+| `large` | `96 x 64 x 96` | 512 | 589,824 |
+
+`grid.unitBlocks` affects estimated expanded blocks. A logical solid volume with `unitBlocks: 2` is estimated as eight times as many Minecraft blocks as the same logical volume with `unitBlocks: 1`.
+
+When validation reports a budget error, repair by shrinking bounds, reducing repeated detail, choosing a larger `sizeTier`, or splitting the build into sections.
 
 ## Scaling
 
@@ -310,6 +331,7 @@ ComponentPlan validation should reject:
 - missing semantic references
 - dependency cycles
 - placements outside logical bounds
+- bounds, component counts, or estimated expanded blocks over the active `policy.sizeTier` budget
 - unsupported `grid.unitBlocks`
 - unknown material role references
 - attached components that reference non-attachable targets
