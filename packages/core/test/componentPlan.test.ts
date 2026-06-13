@@ -386,4 +386,97 @@ describe("ComponentPlan", () => {
     });
     expect(() => compileComponentPlan(plan)).not.toThrow();
   });
+
+  it("expands Platform and Beam components as semantic horizontal solid volumes", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Bridge Deck",
+      grid: { unitBlocks: 2 },
+      bounds: { width: 8, height: 4, length: 5 },
+      palette: {
+        floor: "minecraft:spruce_planks",
+        trim: "minecraft:oak_log",
+      },
+      components: [
+        {
+          id: "deck",
+          type: "Platform",
+          placement: {
+            anchor: { x: 1, y: 2, z: 1 },
+            size: { width: 6, height: 1, length: 3 },
+          },
+        },
+        {
+          id: "front_beam",
+          type: "Beam",
+          inputs: [{ ref: "deck" }],
+          placement: {
+            anchor: { x: 1, y: 3, z: 1 },
+            size: { width: 6, height: 1, length: 1 },
+          },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+
+    expect(craftDag.nodes).toEqual([
+      expect.objectContaining({
+        id: "deck__platform",
+        type: "SolidBox",
+        params: {
+          from: [2, 4, 2],
+          to: [13, 5, 7],
+          block: "floor",
+        },
+      }),
+      expect.objectContaining({
+        id: "front_beam__beam",
+        type: "SolidBox",
+        inputs: [{ ref: "deck__platform" }],
+        params: {
+          from: [2, 6, 2],
+          to: [13, 7, 3],
+          block: "trim",
+        },
+      }),
+    ]);
+    expect(() => compileComponentPlan(plan)).not.toThrow();
+  });
+
+  it("requires floor or explicit material for Platform components", () => {
+    const invalid: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Missing Platform Material",
+      bounds: { width: 4, height: 2, length: 4 },
+      palette: {
+        trim: "minecraft:oak_log",
+      },
+      components: [
+        {
+          id: "deck",
+          type: "Platform",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 4, height: 1, length: 4 },
+          },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(invalid)).toThrow(ValidationError);
+
+    try {
+      validateComponentPlan(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          stage: "component-validation",
+          code: "UNKNOWN_MATERIAL_REF",
+          componentId: "deck",
+        }),
+      ]);
+    }
+  });
 });

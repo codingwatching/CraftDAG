@@ -61,6 +61,22 @@ const FoundationComponentSchema = z.object({
   materials: MaterialsSchema,
 }).strict();
 
+const PlatformComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("Platform"),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: AnchoredPlacementSchema,
+  materials: MaterialsSchema,
+}).strict();
+
+const BeamComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("Beam"),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: AnchoredPlacementSchema,
+  materials: MaterialsSchema,
+}).strict();
+
 const RoomShellComponentSchema = z.object({
   id: z.string().min(1),
   type: z.literal("RoomShell"),
@@ -107,6 +123,8 @@ const SupportPostComponentSchema = z.object({
 
 const ComponentNodeSchema = z.discriminatedUnion("type", [
   FoundationComponentSchema,
+  PlatformComponentSchema,
+  BeamComponentSchema,
   RoomShellComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
@@ -218,6 +236,28 @@ export function expandComponentPlan(doc: unknown): CraftDagDocument {
           params: {
             ...scaledBox(component.placement, unit),
             block: material(component, "main", "foundation"),
+          },
+        });
+        break;
+      case "Platform":
+        craftDagNodes.push({
+          id: nodeId(component.id, "platform"),
+          type: "SolidBox",
+          inputs: expandInputs(component, componentMap),
+          params: {
+            ...scaledBox(component.placement, unit),
+            block: material(component, "main", "floor"),
+          },
+        });
+        break;
+      case "Beam":
+        craftDagNodes.push({
+          id: nodeId(component.id, "beam"),
+          type: "SolidBox",
+          inputs: expandInputs(component, componentMap),
+          params: {
+            ...scaledBox(component.placement, unit),
+            block: material(component, "main", "trim"),
           },
         });
         break;
@@ -493,6 +533,10 @@ function requiredFallbackMaterial(component: ComponentNode): { role: string; val
   switch (component.type) {
     case "Foundation":
       return { role: "main", value: "foundation" };
+    case "Platform":
+      return { role: "main", value: "floor" };
+    case "Beam":
+      return { role: "main", value: "trim" };
     case "RoomShell":
       return { role: "wall", value: "wall" };
     case "Door":
@@ -538,6 +582,10 @@ function outputPart(component: ComponentNode): string {
   switch (component.type) {
     case "Foundation":
       return "solid";
+    case "Platform":
+      return "platform";
+    case "Beam":
+      return "beam";
     case "RoomShell":
       return "shell";
     case "Door":

@@ -137,6 +137,8 @@ For attached and covering components, `placement.target` and `placement.over` ar
 Start with a small component vocabulary:
 
 - `Foundation`
+- `Platform`
+- `Beam`
 - `RoomShell`
 - `Door`
 - `Window`
@@ -144,6 +146,12 @@ Start with a small component vocabulary:
 - `SupportPost`
 
 Avoid broad component catalogs until the repair loop and preview workflow are stable.
+
+Use `Foundation` for ground/base slabs that establish a structure's footprint.
+
+Use `Platform` for semantic horizontal surfaces that are not foundations, such as elevated decks, counters, bridge decks, canopy plates, or simple horizontal slabs.
+
+Use `Beam` for semantic spans, lintels, horizontal trim, rafters, or other rectangular beam-like masses.
 
 ## Placement Model
 
@@ -194,6 +202,7 @@ Agents should not calculate raw `from` and `to` coordinates for attached compone
   "palette": {
     "foundation": "minecraft:cobblestone",
     "wall": "minecraft:oak_planks",
+    "floor": "minecraft:oak_planks",
     "roof": "minecraft:spruce_planks",
     "glass": "minecraft:glass",
     "door": "minecraft:oak_door"
@@ -221,6 +230,16 @@ Agents should not calculate raw `from` and `to` coordinates for attached compone
         "includeFloor": false,
         "includeCeiling": false
       }
+    },
+    {
+      "id": "porch_deck",
+      "type": "Platform",
+      "inputs": [{ "ref": "foundation" }],
+      "placement": {
+        "anchor": { "x": 3, "y": 1, "z": 0 },
+        "size": { "width": 3, "height": 1, "length": 1 }
+      },
+      "materials": { "main": "floor" }
     },
     {
       "id": "front_door",
