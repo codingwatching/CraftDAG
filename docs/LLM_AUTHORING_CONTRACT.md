@@ -69,13 +69,17 @@ Do not use raw `from` / `to` coordinates in ComponentPlan when a semantic placem
 Allowed ComponentPlan v0.1 components:
 
 - `Foundation`
+- `Platform`
+- `Beam`
 - `RoomShell`
 - `Door`
 - `Window`
 - `GableRoof`
 - `SupportPost`
 
-Do not invent components such as `Dome`, `Staircase`, `Arch`, `Railing`, `Platform`, or `PortalFrame` until the engine schema supports them.
+Use `Foundation` for ground/base slabs. Use `Platform` for elevated decks, counters, bridge decks, canopy plates, and other horizontal surfaces that are not foundations. Use `Beam` for lintels, horizontal spans, trim, rafters, or beam-like masses.
+
+Do not invent components such as `Dome`, `Staircase`, `Arch`, `Railing`, or `PortalFrame` until the engine schema supports them.
 
 When intent needs an unsupported component, simplify to the closest supported semantic form or reduce scope.
 
@@ -336,6 +340,7 @@ Common repairs:
 | Failure | Repair |
 | --- | --- |
 | Unknown component type | Replace with an allowed v0.1 component or reduce scope. |
+| Wrong horizontal component semantics | Use `Foundation` for ground/base slabs, `Platform` for horizontal surfaces, and `Beam` for spans or lintels. |
 | Duplicate `id` | Rename one component and update references. |
 | Broken `ref` | Reference an existing component or define the missing component. |
 | Out-of-bounds anchor/size | Move the component, shrink it, or increase bounds within policy. |
@@ -348,7 +353,6 @@ Common repairs:
 
 The following are expected future directions, not current allowed output:
 
-- horizontal surfaces / beams / platforms
 - explicit openings, arches, and portals
 - roof variants and pitch controls
 - railings and fence lines
@@ -358,4 +362,3 @@ The following are expected future directions, not current allowed output:
 - vision/reference-image decomposition
 
 Until these exist in the schema, describe the closest supported simplified structure or reduce scope.
-

@@ -145,6 +145,8 @@ export interface BaseComponentNode<T extends string, P, O = Record<string, never
 }
 
 export type FoundationComponent = BaseComponentNode<"Foundation", AnchoredComponentPlacement>;
+export type PlatformComponent = BaseComponentNode<"Platform", AnchoredComponentPlacement>;
+export type BeamComponent = BaseComponentNode<"Beam", AnchoredComponentPlacement>;
 
 export interface RoomShellOptions {
   includeFloor?: boolean;
@@ -159,6 +161,8 @@ export type SupportPostComponent = BaseComponentNode<"SupportPost", AnchoredComp
 
 export type ComponentNode =
   | FoundationComponent
+  | PlatformComponent
+  | BeamComponent
   | RoomShellComponent
   | DoorComponent
   | WindowComponent
