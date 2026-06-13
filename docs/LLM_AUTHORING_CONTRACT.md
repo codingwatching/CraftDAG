@@ -284,11 +284,17 @@ Do not bypass validation.
 
 Prefer small and medium plans.
 
-Recommended current limits:
+`policy.sizeTier` defaults to `"small"` when omitted. Use it to communicate intended scale before expansion:
 
-- Small: up to roughly `32 x 32 x 32`, flat ComponentPlan is acceptable.
-- Medium: may use several sections, but should still be previewable and repairable.
-- Large: should be reduced to a simplified interpretation until hierarchical assemblies and budgets are available.
+| Tier | Max logical bounds | Max components | Max estimated expanded blocks |
+| --- | --- | ---: | ---: |
+| `small` | `32 x 32 x 32` | 64 | 32,768 |
+| `medium` | `64 x 48 x 64` | 256 | 196,608 |
+| `large` | `96 x 64 x 96` | 512 | 589,824 |
+
+Small flat ComponentPlans are preferred. Medium plans may use several sections but should still be previewable and repairable. Large plans should be simplified and sectioned until hierarchical assemblies are available.
+
+`unitBlocks: 2` increases expanded block estimates. Do not use it to force a large landmark through a small budget.
 
 When a prompt asks for a large or famous building, do not attempt a full exact replica. First reduce scope.
 
@@ -356,7 +362,7 @@ Common repairs:
 | Out-of-bounds anchor/size | Move the component, shrink it, or increase bounds within policy. |
 | Door/window/opening/portal exceeds target wall | Reduce offset, width, or height; choose a larger target. |
 | Roof exceeds bounds | Reserve more height, reduce span, reduce overhang, use `FlatRoof` for low covers, or downscope. |
-| Plan too large | Split into sections, simplify details, or choose a smaller size tier. |
+| Plan over budget | Split into sections, simplify details, shrink bounds, reduce component count, or choose a larger valid size tier. |
 | Unsupported landmark detail | Preserve major silhouette and omit fine detail. |
 
 ## Future Capabilities Not Yet In v0.1
@@ -368,7 +374,6 @@ The following are expected future directions, not current allowed output:
 - railings and fence lines
 - hierarchical assemblies
 - bounded repetition
-- large-build budgets
 - vision/reference-image decomposition
 
 Until these exist in the schema, describe the closest supported simplified structure or reduce scope.

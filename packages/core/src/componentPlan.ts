@@ -5,6 +5,7 @@ import {
   ComponentNode,
   ComponentPlanDocument,
   ComponentSize,
+  ComponentPlanSizeTier,
   CraftDagDocument,
   CraftDagNode,
   Vec3,
@@ -165,12 +166,39 @@ const ComponentPlanSchema = z.object({
   grid: z.object({
     unitBlocks: z.union([z.literal(1), z.literal(2)]).optional(),
   }).strict().optional(),
+  policy: z.object({
+    sizeTier: z.enum(["small", "medium", "large"]).optional(),
+  }).strict().optional(),
   bounds: ComponentSizeSchema,
   palette: z.record(z.string(), z.string().min(1)),
   components: z.array(ComponentNodeSchema),
 }).strict();
 
 type AnchoredComponent = Extract<ComponentNode, { placement: { anchor: unknown; size: unknown } }>;
+
+interface ComponentBudget {
+  maxBounds: ComponentSize;
+  maxComponents: number;
+  maxEstimatedBlocks: number;
+}
+
+const COMPONENT_BUDGETS: Record<ComponentPlanSizeTier, ComponentBudget> = {
+  small: {
+    maxBounds: { width: 32, height: 32, length: 32 },
+    maxComponents: 64,
+    maxEstimatedBlocks: 32 * 32 * 32,
+  },
+  medium: {
+    maxBounds: { width: 64, height: 48, length: 64 },
+    maxComponents: 256,
+    maxEstimatedBlocks: 64 * 48 * 64,
+  },
+  large: {
+    maxBounds: { width: 96, height: 64, length: 96 },
+    maxComponents: 512,
+    maxEstimatedBlocks: 96 * 64 * 96,
+  },
+};
 
 interface ComponentValidationIssue {
   stage: "component-validation";
@@ -240,6 +268,7 @@ export function validateComponentPlan(doc: unknown): ComponentPlanDocument {
   validateComponentGraph(parsed);
   validateAttachments(parsed, componentMap);
   validateCovers(parsed, componentMap);
+  validateBudgetPolicy(parsed, componentMap);
 
   return parsed;
 }
@@ -568,6 +597,108 @@ function validateCovers(plan: ComponentPlanDocument, componentMap: Map<string, C
       });
     }
   }
+}
+
+function validateBudgetPolicy(plan: ComponentPlanDocument, componentMap: Map<string, ComponentNode>): void {
+  const tier = plan.policy?.sizeTier ?? "small";
+  const budget = COMPONENT_BUDGETS[tier];
+  const unit = plan.grid?.unitBlocks ?? 1;
+
+  if (
+    plan.bounds.width > budget.maxBounds.width ||
+    plan.bounds.height > budget.maxBounds.height ||
+    plan.bounds.length > budget.maxBounds.length
+  ) {
+    throw componentValidationError({
+      code: "PLAN_BOUNDS_OVER_BUDGET",
+      message: `ComponentPlan bounds exceed the ${tier} size tier budget.`,
+      repairHint: `Reduce bounds to at most ${budget.maxBounds.width}x${budget.maxBounds.height}x${budget.maxBounds.length}, choose a larger sizeTier, or split the build into sections.`,
+    });
+  }
+
+  if (plan.components.length > budget.maxComponents) {
+    throw componentValidationError({
+      code: "PLAN_COMPONENTS_OVER_BUDGET",
+      message: `ComponentPlan has ${plan.components.length} components, exceeding the ${tier} size tier budget of ${budget.maxComponents}.`,
+      repairHint: "Reduce repeated detail, combine simple volumes, choose a larger sizeTier, or split the build into sections.",
+    });
+  }
+
+  const estimatedBlocks = estimateExpandedBlocks(plan, componentMap, unit);
+  if (estimatedBlocks > budget.maxEstimatedBlocks) {
+    throw componentValidationError({
+      code: "PLAN_ESTIMATED_BLOCKS_OVER_BUDGET",
+      message: `ComponentPlan estimated expanded block count ${estimatedBlocks} exceeds the ${tier} size tier budget of ${budget.maxEstimatedBlocks}.`,
+      repairHint: "Shrink large volumes, reduce repeated components, choose a larger sizeTier, or split the build into sections.",
+    });
+  }
+}
+
+function estimateExpandedBlocks(
+  plan: ComponentPlanDocument,
+  componentMap: Map<string, ComponentNode>,
+  unit: 1 | 2
+): number {
+  let total = 0;
+  for (const component of plan.components) {
+    total += estimateComponentBlocks(component, componentMap, plan.bounds, unit);
+  }
+
+  return total;
+}
+
+function estimateComponentBlocks(
+  component: ComponentNode,
+  componentMap: Map<string, ComponentNode>,
+  bounds: ComponentSize,
+  unit: 1 | 2
+): number {
+  switch (component.type) {
+    case "Foundation":
+    case "Platform":
+    case "Beam":
+    case "RoomShell":
+    case "SupportPost":
+      return componentVolume(component.placement.size) * unit * unit * unit;
+    case "Door":
+    case "Window":
+    case "Opening":
+    case "Portal": {
+      const width = component.placement.width ?? defaultAttachmentWidth(component.type);
+      const height = component.placement.height ?? defaultAttachmentHeight(component.type);
+      return width * height * unit * unit;
+    }
+    case "GableRoof": {
+      const target = componentMap.get(component.placement.over);
+      if (!target || !isAnchoredComponent(target)) {
+        return 0;
+      }
+      const geometry = roofGeometry(component, target, bounds, unit);
+      const width = geometry.maxX - geometry.minX;
+      const length = geometry.maxZ - geometry.minZ;
+      const scaledHeight = geometry.scaledMaxY - geometry.baseY * unit;
+      return width * unit * length * unit * scaledHeight;
+    }
+    case "FlatRoof": {
+      const target = componentMap.get(component.placement.over);
+      if (!target || !isAnchoredComponent(target)) {
+        return 0;
+      }
+      const geometry = flatRoofGeometry(component, target, bounds, unit);
+      const width = geometry.maxX - geometry.minX;
+      const length = geometry.maxZ - geometry.minZ;
+      const scaledHeight = geometry.scaledMaxY - geometry.baseY * unit;
+      return width * unit * length * unit * scaledHeight;
+    }
+    default: {
+      const _exhaustiveCheck: never = component;
+      throw new ValidationError(`Unhandled component type: ${(_exhaustiveCheck as any).type}`);
+    }
+  }
+}
+
+function componentVolume(size: ComponentSize): number {
+  return size.width * size.height * size.length;
 }
 
 function validateComponentMaterials(plan: ComponentPlanDocument, component: ComponentNode): void {

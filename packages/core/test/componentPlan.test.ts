@@ -715,4 +715,144 @@ describe("ComponentPlan", () => {
       ]);
     }
   });
+
+  it("rejects ComponentPlan bounds that exceed the declared size tier", () => {
+    const invalid: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Too Wide For Small",
+      bounds: { width: 33, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:cobblestone",
+      },
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 33, height: 1, length: 8 },
+          },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(invalid)).toThrow(ValidationError);
+
+    try {
+      validateComponentPlan(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          stage: "component-validation",
+          code: "PLAN_BOUNDS_OVER_BUDGET",
+        }),
+      ]);
+    }
+  });
+
+  it("allows larger bounds when a medium size tier is declared", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Medium Hall",
+      policy: { sizeTier: "medium" },
+      bounds: { width: 33, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:cobblestone",
+      },
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 33, height: 1, length: 8 },
+          },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(plan)).not.toThrow();
+  });
+
+  it("rejects ComponentPlans with too many components for the size tier", () => {
+    const components: ComponentPlanDocument["components"] = [];
+    for (let index = 0; index < 65; index += 1) {
+      components.push({
+        id: `post_${index}`,
+        type: "SupportPost",
+        placement: {
+          anchor: { x: index % 8, y: 0, z: Math.floor(index / 8) },
+          size: { width: 1, height: 1, length: 1 },
+        },
+      });
+    }
+
+    const invalid: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Too Many Posts",
+      bounds: { width: 8, height: 2, length: 9 },
+      palette: {
+        trim: "minecraft:oak_log",
+      },
+      components,
+    };
+
+    expect(() => validateComponentPlan(invalid)).toThrow(ValidationError);
+
+    try {
+      validateComponentPlan(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          stage: "component-validation",
+          code: "PLAN_COMPONENTS_OVER_BUDGET",
+        }),
+      ]);
+    }
+  });
+
+  it("rejects ComponentPlans with estimated expanded blocks over budget", () => {
+    const invalid: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Too Dense For Small",
+      bounds: { width: 32, height: 32, length: 32 },
+      palette: {
+        foundation: "minecraft:cobblestone",
+      },
+      components: [
+        {
+          id: "lower_mass",
+          type: "Foundation",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 32, height: 32, length: 32 },
+          },
+        },
+        {
+          id: "upper_mass",
+          type: "Foundation",
+          placement: {
+            anchor: { x: 0, y: 0, z: 0 },
+            size: { width: 32, height: 32, length: 32 },
+          },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(invalid)).toThrow(ValidationError);
+
+    try {
+      validateComponentPlan(invalid);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          stage: "component-validation",
+          code: "PLAN_ESTIMATED_BLOCKS_OVER_BUDGET",
+        }),
+      ]);
+    }
+  });
 });

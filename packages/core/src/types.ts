@@ -99,6 +99,12 @@ export interface ComponentGrid {
   unitBlocks?: 1 | 2;
 }
 
+export type ComponentPlanSizeTier = "small" | "medium" | "large";
+
+export interface ComponentPlanPolicy {
+  sizeTier?: ComponentPlanSizeTier;
+}
+
 export interface ComponentSize {
   width: number;
   height: number;
@@ -179,6 +185,7 @@ export interface ComponentPlanDocument {
   version: "0.1";
   name: string;
   grid?: ComponentGrid;
+  policy?: ComponentPlanPolicy;
   bounds: ComponentSize;
   palette: Record<string, string>;
   components: ComponentNode[];
