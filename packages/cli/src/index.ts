@@ -163,6 +163,7 @@ component
   .description("Validate a ComponentPlan JSON file")
   .argument("<file>", "path to the ComponentPlan JSON file")
   .option("--json", "emit machine-readable JSON")
+  .option("--dry-run", "validate then print shape primitive dimension estimates")
   .action((file, options) => {
     const doc = readJsonFile(file);
     try {
@@ -171,6 +172,9 @@ component
         writeJson({ ok: true, diagnostics: [] });
       } else {
         console.log("✓ ComponentPlan is valid!");
+      }
+      if (options.dryRun) {
+        dryRunShapeEstimate(doc);
       }
     } catch (err: any) {
       if (options.json) {
@@ -181,6 +185,78 @@ component
       process.exit(1);
     }
   });
+
+function dryRunShapeEstimate(doc: unknown): void {
+  const plan = doc as any;
+  const shapeTypes = ["SteppedDome", "SteppedTier", "VerticalSetbackVolume", "TaperedVolume"];
+  const allComponents: any[] = [
+    ...(plan.components ?? []),
+    ...(plan.sections ?? []).flatMap((s: any) => s.components ?? []),
+  ];
+
+  console.log("\n--- Shape Primitive Dimension Estimates ---");
+  let issues = 0;
+
+  for (const comp of allComponents) {
+    if (!shapeTypes.includes(comp.type)) continue;
+    const size = comp.placement?.size;
+    if (!size) continue;
+    const opts = comp.options ?? {};
+
+    switch (comp.type) {
+      case "SteppedDome": {
+        const levels = opts.levels ?? size.height;
+        const inset = opts.insetPerLevel ?? 1;
+        const finalW = size.width - (levels - 1) * 2 * inset;
+        const finalL = size.length - (levels - 1) * 2 * inset;
+        const status = finalW <= 0 || finalL <= 0 ? "COLLAPSES" : "OK";
+        if (status === "COLLAPSES") issues++;
+        console.log(`  ${comp.id} (${comp.type}): ${size.width}x${size.length} → ${finalW}x${finalL} after ${levels} levels (inset=${inset}) [${status}]`);
+        break;
+      }
+      case "SteppedTier": {
+        const levels = opts.levels ?? Math.ceil(size.height / (opts.stepHeight ?? 1));
+        const inset = opts.insetPerLevel ?? 1;
+        const axis = opts.axis ?? "both";
+        const finalW = axis === "z" ? size.width : size.width - (levels - 1) * 2 * inset;
+        const finalL = axis === "x" ? size.length : size.length - (levels - 1) * 2 * inset;
+        const status = finalW <= 0 || finalL <= 0 ? "COLLAPSES" : "OK";
+        if (status === "COLLAPSES") issues++;
+        console.log(`  ${comp.id} (${comp.type}): ${size.width}x${size.length} → ${finalW}x${finalL} after ${levels} levels (inset=${inset}, axis=${axis}) [${status}]`);
+        break;
+      }
+      case "VerticalSetbackVolume": {
+        const levels = opts.levels ?? Math.ceil(size.height / (opts.levelHeight ?? 6));
+        const setback = opts.setbackPerLevel ?? 1;
+        const axis = opts.axis ?? "both";
+        const finalW = axis === "z" ? size.width : size.width - (levels - 1) * 2 * setback;
+        const finalL = axis === "x" ? size.length : size.length - (levels - 1) * 2 * setback;
+        const status = finalW <= 0 || finalL <= 0 ? "COLLAPSES" : "OK";
+        if (status === "COLLAPSES") issues++;
+        console.log(`  ${comp.id} (${comp.type}): ${size.width}x${size.length} → ${finalW}x${finalL} after ${levels} levels (setback=${setback}, axis=${axis}) [${status}]`);
+        break;
+      }
+      case "TaperedVolume": {
+        const startInset = opts.startInset ?? 0;
+        const endInset = opts.endInset ?? 0;
+        const axis = opts.axis ?? (size.width >= size.length ? "x" : "z");
+        const crossAxis = axis === "x" ? size.length : size.width;
+        const maxInset = Math.max(startInset, endInset);
+        const finalCross = crossAxis - maxInset * 2;
+        const status = finalCross <= 0 ? "COLLAPSES" : "OK";
+        if (status === "COLLAPSES") issues++;
+        console.log(`  ${comp.id} (${comp.type}): cross-section ${crossAxis} → ${finalCross} (startInset=${startInset}, endInset=${endInset}, axis=${axis}) [${status}]`);
+        break;
+      }
+    }
+  }
+
+  if (issues === 0) {
+    console.log("\nAll shape primitives within safe bounds.");
+  } else {
+    console.log(`\n⚠ ${issues} shape primitive(s) may collapse — review dimensions before compiling.`);
+  }
+}
 
 component
   .command("expand")

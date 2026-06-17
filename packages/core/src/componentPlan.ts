@@ -2177,17 +2177,8 @@ function validateAttachments(components: readonly ComponentNode[], componentMap:
       throw componentValidationError({
         code: "INVALID_ATTACHMENT_TARGET",
         componentId: component.id,
-        message: `Component "${component.id}" must attach to an anchored component target.`,
-        repairHint: "Attach doors, windows, openings, and portals to a RoomShell or another anchored component.",
-      });
-    }
-
-    if (!isAttachableTarget(target)) {
-      throw componentValidationError({
-        code: "INVALID_ATTACHMENT_TARGET_TYPE",
-        componentId: component.id,
-        message: `Component "${component.id}" cannot attach to "${target.id}" because "${target.id}" is a ${target.type}, which does not support wall attachments.`,
-        repairHint: "Target a RoomShell, Compartment, or Corridor component for wall attachment.",
+        message: `Component "${component.id}" must attach to an anchored component. "${component.placement.target}" is missing or is not an anchored component.`,
+        repairHint: "Target a Foundation, Platform, Beam, RoomShell, Compartment, Corridor, VerticalSetbackVolume, or other anchored component that produces solid wall geometry.",
       });
     }
 
@@ -2205,8 +2196,8 @@ function validateAttachments(components: readonly ComponentNode[], componentMap:
       throw componentValidationError({
         code: "ATTACHMENT_OUT_OF_BOUNDS",
         componentId: component.id,
-        message: `Component "${component.id}" placement exceeds target wall bounds.`,
-        repairHint: "Reduce offset/size or attach the component to a larger target wall.",
+        message: `Component "${component.id}" (${component.type}) placement exceeds the wall bounds of target "${target.id}" (${target.type}: ${target.placement.size.width}x${target.placement.size.height}x${target.placement.size.length}).`,
+        repairHint: `Attachment offset ${component.placement.offset}+${width} exceeds wall ${component.placement.wall} length ${lengthAlongWall}, or y ${component.placement.y}+${height} exceeds target height ${target.placement.size.height}. Reduce offset/size or attach to a larger target.`,
       });
     }
   }
@@ -4035,10 +4026,6 @@ function isAttachmentComponent(
   component: ComponentNode
 ): component is Extract<ComponentNode, { type: "Door" | "Window" | "Opening" | "Portal" }> {
   return component.type === "Door" || component.type === "Window" || component.type === "Opening" || component.type === "Portal";
-}
-
-function isAttachableTarget(component: ComponentNode): boolean {
-  return component.type === "RoomShell" || component.type === "Compartment" || component.type === "Corridor";
 }
 
 function defaultAttachmentWidth(componentType: "Door" | "Window" | "Opening" | "Portal"): number {
