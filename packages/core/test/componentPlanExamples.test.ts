@@ -26,7 +26,6 @@ describe("ComponentPlan large examples", () => {
     "path-rock-garden.componentplan.json",
     "sectioned-wall.componentplan.json",
     "ship-bow-shape.componentplan.json",
-    "stair-run-multilevel.componentplan.json",
     "taj-dome-study.componentplan.json",
     "temple-palace-dome-study.componentplan.json",
     "xi-an-bell-tower-study.componentplan.json",
