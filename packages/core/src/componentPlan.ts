@@ -2182,6 +2182,15 @@ function validateAttachments(components: readonly ComponentNode[], componentMap:
       });
     }
 
+    if (!isAttachableTarget(target)) {
+      throw componentValidationError({
+        code: "INVALID_ATTACHMENT_TARGET_TYPE",
+        componentId: component.id,
+        message: `Component "${component.id}" cannot attach to "${target.id}" because "${target.id}" is a ${target.type}, which does not support wall attachments.`,
+        repairHint: "Target a RoomShell, Compartment, or Corridor component for wall attachment.",
+      });
+    }
+
     const lengthAlongWall = component.placement.wall === "front" || component.placement.wall === "back"
       ? target.placement.size.width
       : target.placement.size.length;
@@ -4026,6 +4035,10 @@ function isAttachmentComponent(
   component: ComponentNode
 ): component is Extract<ComponentNode, { type: "Door" | "Window" | "Opening" | "Portal" }> {
   return component.type === "Door" || component.type === "Window" || component.type === "Opening" || component.type === "Portal";
+}
+
+function isAttachableTarget(component: ComponentNode): boolean {
+  return component.type === "RoomShell" || component.type === "Compartment" || component.type === "Corridor";
 }
 
 function defaultAttachmentWidth(componentType: "Door" | "Window" | "Opening" | "Portal"): number {
