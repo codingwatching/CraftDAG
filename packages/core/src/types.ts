@@ -179,6 +179,7 @@ export interface RadialRepeatPlacement {
   source: string;
   count: number;
   startAngle?: number;
+  rotate?: boolean;
 }
 
 export interface ComponentInput {

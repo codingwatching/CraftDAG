@@ -501,6 +501,7 @@ const RadialRepeatPlacementSchema = z.object({
   source: z.string().min(1),
   count: PositiveIntSchema,
   startAngle: z.number().min(0).optional(),
+  rotate: z.boolean().optional(),
 }).strict();
 
 const RadialRepeatComponentSchema = z.object({
@@ -2003,10 +2004,14 @@ function expandRadialRepeat(
       if (!assembly) continue;
       const localComponentMap = buildComponentMap(assembly.components, `Assembly "${assembly.id}"`);
       const shift: Vec3 = [bx, source.placement.anchor.y * unit, bz];
+      const shouldRotate = component.placement.rotate === true;
       for (const localComponent of assembly.components) {
         const localNodes = expandComponentToNodes(localComponent, localComponentMap, assembly.bounds, unit);
         for (const localNode of localNodes) {
-          nodes.push(namespaceAndShiftNode(localNode, repeatedId, shift, []));
+          const rotated = shouldRotate
+            ? rotateNodeLocal(localNode, angle, assembly.bounds.width * unit, assembly.bounds.length * unit)
+            : localNode;
+          nodes.push(namespaceAndShiftNode(rotated, repeatedId, shift, []));
         }
       }
     } else if ("anchor" in source.placement && "size" in source.placement) {
@@ -4099,6 +4104,39 @@ function mirrorNode(
       const _exhaustiveCheck: never = node;
       throw new ValidationError(`Unhandled CraftDAG node type for mirror: ${(_exhaustiveCheck as any).type}`);
     }
+  }
+}
+
+function rotateNodeLocal(
+  node: CraftDagNode,
+  angle: number,
+  localW: number,
+  localL: number
+): CraftDagNode {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const cx = localW / 2;
+  const cz = localL / 2;
+  const rotatePt = (v: [number, number, number]): [number, number, number] => {
+    const dx = v[0] - cx;
+    const dz = v[2] - cz;
+    return [
+      Math.round(cx + dx * cos - dz * sin),
+      v[1],
+      Math.round(cz + dx * sin + dz * cos),
+    ];
+  };
+  switch (node.type) {
+    case "SolidBox":
+    case "HollowBox":
+    case "Wall":
+    case "Floor":
+    case "Column":
+    case "Doorway":
+    case "Window":
+      return { ...node, params: { ...node.params, from: rotatePt(node.params.from), to: rotatePt(node.params.to) } } as CraftDagNode;
+    case "GableRoof":
+      return { ...node, params: { ...node.params, from: rotatePt(node.params.from), to: rotatePt(node.params.to) } };
+    default: return node;
   }
 }
 
