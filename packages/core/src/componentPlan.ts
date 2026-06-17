@@ -513,6 +513,20 @@ const RadialRepeatComponentSchema = z.object({
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
+const AssetInstancePlacementSchema = z.object({
+  assetId: z.string().min(1),
+  anchor: ComponentAnchorSchema,
+}).strict();
+
+const AssetInstanceComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("AssetInstance"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: AssetInstancePlacementSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
 const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   FoundationComponentSchema,
   PlatformComponentSchema,
@@ -578,6 +592,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   SupportPostComponentSchema,
   RepeatComponentSchema,
   InstanceComponentSchema,
+  AssetInstanceComponentSchema,
 ]);
 
 const ComponentAssemblyDefinitionSchema = z.object({
@@ -937,7 +952,7 @@ function validateComponentSet(
 /**
  * Expands a validated ComponentPlan into low-level CraftDAG primitives.
  */
-export function expandComponentPlan(doc: unknown): CraftDagDocument {
+export function expandComponentPlan(doc: unknown, assets?: Record<string, VoxelPlan>): CraftDagDocument {
   const plan = validateComponentPlan(doc);
   const unit = plan.grid?.unitBlocks ?? 1;
   const componentMap = new Map((plan.components ?? []).map((component) => [component.id, component]));
@@ -945,7 +960,7 @@ export function expandComponentPlan(doc: unknown): CraftDagDocument {
   const craftDagNodes: CraftDagNode[] = [];
 
   for (const component of plan.components ?? []) {
-    craftDagNodes.push(...expandComponentToNodes(component, componentMap, plan.bounds, unit, assemblyMap));
+    craftDagNodes.push(...expandComponentToNodes(component, componentMap, plan.bounds, unit, assemblyMap, assets));
   }
 
   for (const section of plan.sections ?? []) {
@@ -990,7 +1005,8 @@ function expandComponentToNodes(
   componentMap: Map<string, ComponentNode>,
   bounds: ComponentSize,
   unit: 1 | 2,
-  assemblyMap = new Map<string, ComponentAssemblyDefinition>()
+  assemblyMap = new Map<string, ComponentAssemblyDefinition>(),
+  assets?: Record<string, VoxelPlan>
 ): CraftDagNode[] {
   switch (component.type) {
     case "Foundation":
@@ -1081,6 +1097,29 @@ function expandComponentToNodes(
       return expandDiagonalBeam(component, unit, expandInputs(component, componentMap));
     case "RadialRepeat":
       return expandRadialRepeat(component, componentMap, unit, assemblyMap);
+    case "AssetInstance": {
+      const voxel = assets?.[component.placement.assetId];
+      if (!voxel) return [];
+      const ax = component.placement.anchor.x * unit;
+      const ay = component.placement.anchor.y * unit;
+      const az = component.placement.anchor.z * unit;
+      const inpts = expandInputs(component, componentMap);
+      const result: CraftDagNode[] = [];
+      for (let i = 0; i < voxel.blocks.length; i++) {
+        const b = voxel.blocks[i];
+        result.push({
+          id: `${component.id}__asset_${i}`,
+          type: "SolidBox",
+          inputs: inpts,
+          params: {
+            from: [b.pos[0] + ax, b.pos[1] + ay, b.pos[2] + az] as Vec3,
+            to: [b.pos[0] + ax, b.pos[1] + ay, b.pos[2] + az] as Vec3,
+            block: b.block.name,
+          },
+        });
+      }
+      return result;
+    }
     case "Door":
       return [{
         id: nodeId(component.id, "opening"),
@@ -1163,8 +1202,8 @@ function expandComponentToNodes(
   }
 }
 
-export function compileComponentPlan(doc: unknown): VoxelPlan {
-  return compileDocument(expandComponentPlan(doc));
+export function compileComponentPlan(doc: unknown, assets?: Record<string, VoxelPlan>): VoxelPlan {
+  return compileDocument(expandComponentPlan(doc, assets));
 }
 
 function componentValidationError(issue: Omit<ComponentValidationIssue, "stage" | "severity"> & {
@@ -2755,6 +2794,8 @@ function estimateComponentBlocks(
       if (!source) return 0;
       return estimateComponentBlocks(source, componentMap, assemblyMap, bounds, unit) * (component.placement.count - 1);
     }
+    case "AssetInstance":
+      return 0;
     default: {
       const _exhaustiveCheck: never = component;
       throw new ValidationError(`Unhandled component type: ${(_exhaustiveCheck as any).type}`);
@@ -3624,6 +3665,7 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
       return [{ role: "main", value: "trim" }];
     case "Repeat":
     case "Instance":
+    case "AssetInstance":
       return [];
     case "CircleRing":
     case "DiagonalBeam":
@@ -3725,6 +3767,7 @@ function outputPart(component: ComponentNode): string {
     case "RadialRepeat":
       return "repeat";
     case "Instance":
+    case "AssetInstance":
       return "instance";
     default: {
       const _exhaustiveCheck: never = component;

@@ -182,6 +182,11 @@ export interface RadialRepeatPlacement {
   rotate?: boolean;
 }
 
+export interface AssetInstancePlacement {
+  assetId: string;
+  anchor: ComponentAnchor;
+}
+
 export interface ComponentInput {
   ref: string;
 }
@@ -339,6 +344,7 @@ export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentP
 export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
 export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;
 export type RadialRepeatComponent = BaseComponentNode<"RadialRepeat", RadialRepeatPlacement>;
+export type AssetInstanceComponent = BaseComponentNode<"AssetInstance", AssetInstancePlacement>;
 
 export type DoorComponent = BaseComponentNode<"Door", WallAttachmentPlacement>;
 export type WindowComponent = BaseComponentNode<"Window", WallAttachmentPlacement>;
@@ -384,7 +390,8 @@ export type AssemblyComponentNode =
 
 export type ComponentNode =
   | AssemblyComponentNode
-  | InstanceComponent;
+  | InstanceComponent
+  | AssetInstanceComponent;
 
 export interface ComponentAssemblyDefinition {
   id: string;
