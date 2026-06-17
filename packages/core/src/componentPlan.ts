@@ -460,6 +460,8 @@ const CircleRingOptionsSchema = z.object({
   thickness: PositiveIntSchema.optional(),
   height: PositiveIntSchema.optional(),
   fill: z.enum(["hollow", "solid"]).optional(),
+  startAngle: z.number().min(0).max(360).optional(),
+  endAngle: z.number().min(0).max(360).optional(),
 }).strict().optional();
 
 const CircleRingComponentSchema = z.object({
@@ -470,6 +472,26 @@ const CircleRingComponentSchema = z.object({
   placement: CircleRingPlacementSchema,
   materials: MaterialsSchema,
   options: CircleRingOptionsSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
+const DiagonalBeamPlacementSchema = z.object({
+  from: z.object({ x: NonNegativeIntSchema, y: NonNegativeIntSchema, z: NonNegativeIntSchema }),
+  to: z.object({ x: NonNegativeIntSchema, y: NonNegativeIntSchema, z: NonNegativeIntSchema }),
+}).strict();
+
+const DiagonalBeamOptionsSchema = z.object({
+  thickness: PositiveIntSchema.optional(),
+}).strict().optional();
+
+const DiagonalBeamComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("DiagonalBeam"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: DiagonalBeamPlacementSchema,
+  materials: MaterialsSchema,
+  options: DiagonalBeamOptionsSchema,
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
@@ -494,6 +516,7 @@ const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   RockClusterComponentSchema,
   StairRunComponentSchema,
   CircleRingComponentSchema,
+  DiagonalBeamComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -525,6 +548,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   RockClusterComponentSchema,
   StairRunComponentSchema,
   CircleRingComponentSchema,
+  DiagonalBeamComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -568,7 +592,7 @@ const ComponentPlanSchema = z.object({
 
 type AnchoredComponent = Extract<ComponentNode, { placement: { anchor: unknown; size: unknown } }>;
 type RepeatableComponent = Extract<ComponentNode, {
-  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "CircleRing" | "SupportPost" | "CircleRing" | "Instance";
+  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "CircleRing" | "SupportPost" | "CircleRing" | "DiagonalBeam" | "Instance";
 }>;
 type ComponentScope = "ComponentPlan" | `Assembly "${string}"` | `Section "${string}"`;
 
@@ -1033,6 +1057,8 @@ function expandComponentToNodes(
       return expandStairRun(component, componentMap, unit);
     case "CircleRing":
       return expandCircleRing(component, unit, expandInputs(component, componentMap));
+    case "DiagonalBeam":
+      return expandDiagonalBeam(component, unit, expandInputs(component, componentMap));
     case "Door":
       return [{
         id: nodeId(component.id, "opening"),
@@ -1845,7 +1871,16 @@ function expandCircleRing(
           ? dist <= outerR2 && dist >= innerR2
           : dist <= outerR2;
         if (isInRing) {
-          blocks.push([center.x * unit + dx, center.z * unit + dz]);
+          const angle = Math.atan2(dz, dx) * (180 / Math.PI);
+          const normalizedAngle = ((angle % 360) + 360) % 360;
+          const start = component.options?.startAngle ?? 0;
+          const end = component.options?.endAngle ?? 360;
+          const inArc = start <= end
+            ? normalizedAngle >= start && normalizedAngle <= end
+            : normalizedAngle >= start || normalizedAngle <= end;
+          if (inArc) {
+            blocks.push([center.x * unit + dx, center.z * unit + dz]);
+          }
         }
       }
     }
@@ -1865,6 +1900,52 @@ function expandCircleRing(
     }
   }
 
+  return nodes;
+}
+
+function expandDiagonalBeam(
+  component: Extract<ComponentNode, { type: "DiagonalBeam" }>,
+  unit: 1 | 2,
+  inputs: { ref: string }[]
+): CraftDagNode[] {
+  const { from, to } = component.placement;
+  const thickness = component.options?.thickness ?? 1;
+  const block = material(component, "main", "wall");
+  const f = [from.x * unit, from.y * unit, from.z * unit] as [number, number, number];
+  const t = [to.x * unit, to.y * unit, to.z * unit] as [number, number, number];
+
+  const dx = t[0] - f[0];
+  const dy = t[1] - f[1];
+  const dz = t[2] - f[2];
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+  if (steps === 0) return [];
+
+  const stepX = dx / steps;
+  const stepY = dy / steps;
+  const stepZ = dz / steps;
+  const nodes: CraftDagNode[] = [];
+  const halfThick = Math.floor(thickness * unit / 2);
+
+  for (let i = 0; i <= steps; i++) {
+    const bx = Math.round(f[0] + stepX * i);
+    const by = Math.round(f[1] + stepY * i);
+    const bz = Math.round(f[2] + stepZ * i);
+
+    for (let tx = -halfThick; tx <= halfThick; tx++) {
+      for (let ty = -halfThick; ty <= halfThick; ty++) {
+        for (let tz = -halfThick; tz <= halfThick; tz++) {
+          const px = bx + tx, py = by + ty, pz = bz + tz;
+          if (px < 0 || py < 0 || pz < 0) continue;
+          nodes.push({
+            id: `${component.id}__beam_${i}_${tx}_${ty}_${tz}`,
+            type: "SolidBox",
+            inputs,
+            params: { from: [px, py, pz], to: [px, py, pz], block },
+          });
+        }
+      }
+    }
+  }
   return nodes;
 }
 
@@ -2583,6 +2664,13 @@ function estimateComponentBlocks(
       const fill = component.options?.fill ?? "hollow";
       const area = fill === "solid" ? Math.PI * r * r : Math.PI * (r * r - Math.max(0, r - t) * Math.max(0, r - t));
       return Math.ceil(area) * h;
+    }
+    case "DiagonalBeam": {
+      const { from, to: end } = component.placement;
+      const dx = end.x - from.x, dy = end.y - from.y, dz = end.z - from.z;
+      const len = Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz));
+      const t = component.options?.thickness ?? 1;
+      return len * t * t * t;
     }
     default: {
       const _exhaustiveCheck: never = component;
@@ -3453,6 +3541,7 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
       return [{ role: "main", value: "trim" }];
     case "Repeat":
     case "CircleRing":
+    case "DiagonalBeam":
     case "Instance":
       return [];
     default: {
@@ -3545,6 +3634,7 @@ function outputPart(component: ComponentNode): string {
     case "Repeat":
       return "repeat";
     case "CircleRing":
+    case "DiagonalBeam":
       return "ring_0";
     case "Instance":
       return "instance";
@@ -3770,6 +3860,7 @@ function expandRepeatableComponent(
         },
       }];
     case "CircleRing":
+    case "DiagonalBeam":
       throw new ValidationError("CircleRing should be expanded via expandRepeat, not expandRepeatableComponent");
     case "Instance":
       throw new ValidationError("Instance should be expanded via expandRepeat, not expandRepeatableComponent");

@@ -160,6 +160,17 @@ export interface CircleRingOptions {
   thickness?: number;
   height?: number;
   fill?: "hollow" | "solid";
+  startAngle?: number;
+  endAngle?: number;
+}
+
+export interface DiagonalBeamPlacement {
+  from: { x: number; y: number; z: number };
+  to: { x: number; y: number; z: number };
+}
+
+export interface DiagonalBeamOptions {
+  thickness?: number;
 }
 
 export interface ComponentInput {
@@ -317,6 +328,7 @@ export interface StairRunOptions {
 }
 export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentPlacement, StairRunOptions>;
 export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
+export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;
 
 export type DoorComponent = BaseComponentNode<"Door", WallAttachmentPlacement>;
 export type WindowComponent = BaseComponentNode<"Window", WallAttachmentPlacement>;
@@ -349,6 +361,7 @@ export type AssemblyComponentNode =
   | RockClusterComponent
   | StairRunComponent
   | CircleRingComponent
+  | DiagonalBeamComponent
   | DoorComponent
   | WindowComponent
   | OpeningComponent
