@@ -173,6 +173,14 @@ export interface DiagonalBeamOptions {
   thickness?: number;
 }
 
+export interface RadialRepeatPlacement {
+  center: { x: number; z: number };
+  radius: number;
+  source: string;
+  count: number;
+  startAngle?: number;
+}
+
 export interface ComponentInput {
   ref: string;
 }
@@ -329,6 +337,7 @@ export interface StairRunOptions {
 export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentPlacement, StairRunOptions>;
 export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
 export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;
+export type RadialRepeatComponent = BaseComponentNode<"RadialRepeat", RadialRepeatPlacement>;
 
 export type DoorComponent = BaseComponentNode<"Door", WallAttachmentPlacement>;
 export type WindowComponent = BaseComponentNode<"Window", WallAttachmentPlacement>;
@@ -362,6 +371,7 @@ export type AssemblyComponentNode =
   | StairRunComponent
   | CircleRingComponent
   | DiagonalBeamComponent
+  | RadialRepeatComponent
   | DoorComponent
   | WindowComponent
   | OpeningComponent

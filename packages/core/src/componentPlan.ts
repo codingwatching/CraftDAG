@@ -495,6 +495,23 @@ const DiagonalBeamComponentSchema = z.object({
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
+const RadialRepeatPlacementSchema = z.object({
+  center: z.object({ x: NonNegativeIntSchema, z: NonNegativeIntSchema }),
+  radius: PositiveIntSchema,
+  source: z.string().min(1),
+  count: PositiveIntSchema,
+  startAngle: z.number().min(0).optional(),
+}).strict();
+
+const RadialRepeatComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("RadialRepeat"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: RadialRepeatPlacementSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
 const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   FoundationComponentSchema,
   PlatformComponentSchema,
@@ -517,6 +534,7 @@ const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   CircleRingComponentSchema,
   DiagonalBeamComponentSchema,
+  RadialRepeatComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -549,6 +567,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   CircleRingComponentSchema,
   DiagonalBeamComponentSchema,
+  RadialRepeatComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -592,7 +611,7 @@ const ComponentPlanSchema = z.object({
 
 type AnchoredComponent = Extract<ComponentNode, { placement: { anchor: unknown; size: unknown } }>;
 type RepeatableComponent = Extract<ComponentNode, {
-  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "CircleRing" | "SupportPost" | "CircleRing" | "DiagonalBeam" | "Instance";
+  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "CircleRing" | "DiagonalBeam" | "SupportPost" | "Instance";
 }>;
 type ComponentScope = "ComponentPlan" | `Assembly "${string}"` | `Section "${string}"`;
 
@@ -859,7 +878,7 @@ function validateComponentSet(
       if (!inputTarget) {
         throw unknownRefError(component, `inputs ref "${input.ref}"`, input.ref, componentMap);
       }
-      if (inputTarget.type === "Repeat" || inputTarget.type === "Instance") {
+      if (inputTarget.type === "Repeat" || inputTarget.type === "Instance" || inputTarget.type === "RadialRepeat") {
         throw componentValidationError({
           code: "INVALID_NON_PHYSICAL_REFERENCE",
           componentId: component.id,
@@ -1059,6 +1078,8 @@ function expandComponentToNodes(
       return expandCircleRing(component, unit, expandInputs(component, componentMap));
     case "DiagonalBeam":
       return expandDiagonalBeam(component, unit, expandInputs(component, componentMap));
+    case "RadialRepeat":
+      return expandRadialRepeat(component, componentMap, unit, assemblyMap);
     case "Door":
       return [{
         id: nodeId(component.id, "opening"),
@@ -1949,6 +1970,58 @@ function expandDiagonalBeam(
   return nodes;
 }
 
+function expandRadialRepeat(
+  component: Extract<ComponentNode, { type: "RadialRepeat" }>,
+  componentMap: Map<string, ComponentNode>,
+  unit: 1 | 2,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>
+): CraftDagNode[] {
+  const { center, radius, source: sourceId, count, startAngle } = component.placement;
+  const source = componentMap.get(sourceId);
+  if (!source || source.type === "Repeat" || source.type === "RadialRepeat") {
+    throw componentValidationError({
+      code: "INVALID_RADIAL_REPEAT_SOURCE",
+      componentId: component.id,
+      message: `RadialRepeat "${component.id}" must reference a physical component or Instance.`,
+      repairHint: "Use a Foundation, Platform, Beam, RoomShell, Compartment, Corridor, TaperedVolume, SteppedTier, VerticalSetbackVolume, SteppedDome, RailingRun, ArcadeRun, SupportBracket, TreeCanopy, OrganicPatch, PathRun, RockCluster, StairRun, SupportPost, CircleRing, DiagonalBeam, or Instance as the source.",
+    });
+  }
+
+  const nodes: CraftDagNode[] = [];
+  const start = (startAngle ?? 0) * (Math.PI / 180);
+  const cx = center.x * unit;
+  const cz = center.z * unit;
+
+  for (let i = 0; i < count; i++) {
+    const angle = start + (i * 2 * Math.PI) / count;
+    const bx = Math.round(cx + radius * unit * Math.cos(angle));
+    const bz = Math.round(cz + radius * unit * Math.sin(angle));
+    const repeatedId = `${component.id}__${sourceId}_${i}`;
+
+    if (source.type === "Instance") {
+      const assembly = assemblyMap.get(source.placement.assembly);
+      if (!assembly) continue;
+      const localComponentMap = buildComponentMap(assembly.components, `Assembly "${assembly.id}"`);
+      const shift: Vec3 = [bx, source.placement.anchor.y * unit, bz];
+      for (const localComponent of assembly.components) {
+        const localNodes = expandComponentToNodes(localComponent, localComponentMap, assembly.bounds, unit);
+        for (const localNode of localNodes) {
+          nodes.push(namespaceAndShiftNode(localNode, repeatedId, shift, []));
+        }
+      }
+    } else if ("anchor" in source.placement && "size" in source.placement) {
+      const anchoredSource = source as Extract<typeof source, { placement: { anchor: { x: number; y: number; z: number }; size: ComponentSize } }>;
+      const shifted = {
+        ...anchoredSource,
+        id: repeatedId,
+        placement: { ...anchoredSource.placement, anchor: { ...anchoredSource.placement.anchor, x: bx, z: bz } },
+      };
+      nodes.push(...expandRepeatableComponent(shifted as any, anchoredSource as any, component as any, componentMap, unit));
+    }
+  }
+  return nodes;
+}
+
 function unknownRefError(
   component: ComponentNode,
   field: string,
@@ -2671,6 +2744,11 @@ function estimateComponentBlocks(
       const len = Math.ceil(Math.sqrt(dx * dx + dy * dy + dz * dz));
       const t = component.options?.thickness ?? 1;
       return len * t * t * t;
+    }
+    case "RadialRepeat": {
+      const source = componentMap.get(component.placement.source);
+      if (!source) return 0;
+      return estimateComponentBlocks(source, componentMap, assemblyMap, bounds, unit) * (component.placement.count - 1);
     }
     default: {
       const _exhaustiveCheck: never = component;
@@ -3542,6 +3620,8 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
     case "Repeat":
     case "CircleRing":
     case "DiagonalBeam":
+    case "RadialRepeat":
+      return [{ role: "main", value: "wall" }];
     case "Instance":
       return [];
     default: {
@@ -3637,6 +3717,8 @@ function outputPart(component: ComponentNode): string {
       return "ring_0";
     case "DiagonalBeam":
       return "beam_0_0_0_0";
+    case "RadialRepeat":
+      return "repeat";
     case "Instance":
       return "instance";
     default: {
@@ -3862,7 +3944,7 @@ function expandRepeatableComponent(
       }];
     case "CircleRing":
     case "DiagonalBeam":
-      throw new ValidationError("CircleRing should be expanded via expandRepeat, not expandRepeatableComponent");
+      throw new ValidationError("CircleRing/DiagonalBeam should be expanded via expandRepeat, not expandRepeatableComponent");
     case "Instance":
       throw new ValidationError("Instance should be expanded via expandRepeat, not expandRepeatableComponent");
     default: {
