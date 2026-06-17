@@ -3634,8 +3634,9 @@ function outputPart(component: ComponentNode): string {
     case "Repeat":
       return "repeat";
     case "CircleRing":
-    case "DiagonalBeam":
       return "ring_0";
+    case "DiagonalBeam":
+      return "beam_0_0_0_0";
     case "Instance":
       return "instance";
     default: {
