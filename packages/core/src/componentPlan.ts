@@ -450,6 +450,29 @@ const InstanceComponentSchema = z.object({
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
+const CircleRingPlacementSchema = z.object({
+  center: z.object({ x: NonNegativeIntSchema, z: NonNegativeIntSchema }),
+  y: NonNegativeIntSchema,
+  radius: PositiveIntSchema,
+}).strict();
+
+const CircleRingOptionsSchema = z.object({
+  thickness: PositiveIntSchema.optional(),
+  height: PositiveIntSchema.optional(),
+  fill: z.enum(["hollow", "solid"]).optional(),
+}).strict().optional();
+
+const CircleRingComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("CircleRing"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: CircleRingPlacementSchema,
+  materials: MaterialsSchema,
+  options: CircleRingOptionsSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
 const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   FoundationComponentSchema,
   PlatformComponentSchema,
@@ -470,6 +493,7 @@ const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   PathRunComponentSchema,
   RockClusterComponentSchema,
   StairRunComponentSchema,
+  CircleRingComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -500,6 +524,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   PathRunComponentSchema,
   RockClusterComponentSchema,
   StairRunComponentSchema,
+  CircleRingComponentSchema,
   DoorComponentSchema,
   WindowComponentSchema,
   OpeningComponentSchema,
@@ -543,7 +568,7 @@ const ComponentPlanSchema = z.object({
 
 type AnchoredComponent = Extract<ComponentNode, { placement: { anchor: unknown; size: unknown } }>;
 type RepeatableComponent = Extract<ComponentNode, {
-  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "SupportPost" | "Instance";
+  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "CircleRing" | "SupportPost" | "CircleRing" | "Instance";
 }>;
 type ComponentScope = "ComponentPlan" | `Assembly "${string}"` | `Section "${string}"`;
 
@@ -1006,6 +1031,8 @@ function expandComponentToNodes(
       return expandRockCluster(component, componentMap, unit);
     case "StairRun":
       return expandStairRun(component, componentMap, unit);
+    case "CircleRing":
+      return expandCircleRing(component, unit, expandInputs(component, componentMap));
     case "Door":
       return [{
         id: nodeId(component.id, "opening"),
@@ -1789,6 +1816,58 @@ function expandStairRun(
   }));
 }
 
+function expandCircleRing(
+  component: Extract<ComponentNode, { type: "CircleRing" }>,
+  unit: 1 | 2,
+  inputs: { ref: string }[]
+): CraftDagNode[] {
+  const { center, y, radius } = component.placement;
+  const thickness = component.options?.thickness ?? 1;
+  const height = component.options?.height ?? 1;
+  const fill = component.options?.fill ?? "hollow";
+  const block = material(component, "main", "wall");
+  const r = radius * unit;
+
+  const nodes: CraftDagNode[] = [];
+  let partIndex = 0;
+
+  for (let dy = 0; dy < height * unit; dy++) {
+    const layerY = y * unit + dy;
+    const blocks: [number, number][] = [];
+
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        const dist = dx * dx + dz * dz;
+        const outerR2 = r * r;
+        const innerR = Math.max(0, r - thickness * unit);
+        const innerR2 = innerR * innerR;
+        const isInRing = fill === "hollow"
+          ? dist <= outerR2 && dist >= innerR2
+          : dist <= outerR2;
+        if (isInRing) {
+          blocks.push([center.x * unit + dx, center.z * unit + dz]);
+        }
+      }
+    }
+
+    for (const [bx, bz] of blocks) {
+      nodes.push({
+        id: `${component.id}__ring_${partIndex}`,
+        type: "SolidBox",
+        inputs,
+        params: {
+          from: [bx, layerY, bz],
+          to: [bx, layerY, bz],
+          block,
+        },
+      });
+      partIndex++;
+    }
+  }
+
+  return nodes;
+}
+
 function unknownRefError(
   component: ComponentNode,
   field: string,
@@ -2496,6 +2575,14 @@ function estimateComponentBlocks(
         total += estimateComponentBlocks(localComponent, localComponentMap, new Map(), assembly.bounds, unit);
       }
       return total;
+    }
+    case "CircleRing": {
+      const r = component.placement.radius;
+      const h = component.options?.height ?? 1;
+      const t = component.options?.thickness ?? 1;
+      const fill = component.options?.fill ?? "hollow";
+      const area = fill === "solid" ? Math.PI * r * r : Math.PI * (r * r - Math.max(0, r - t) * Math.max(0, r - t));
+      return Math.ceil(area) * h;
     }
     default: {
       const _exhaustiveCheck: never = component;
@@ -3211,7 +3298,7 @@ function validateRepeats(
     for (let index = 1; index < component.placement.count; index += 1) {
       const cloneId = `${component.id}__${source.id}_${index}`;
 
-      if (source.type === "Instance") {
+    if (source.type === "Instance") {
         const assembly = assemblyMap.get(source.placement.assembly);
         if (!assembly) continue;
         const step = component.placement.step * index;
@@ -3365,6 +3452,7 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
     case "SupportPost":
       return [{ role: "main", value: "trim" }];
     case "Repeat":
+    case "CircleRing":
     case "Instance":
       return [];
     default: {
@@ -3456,6 +3544,8 @@ function outputPart(component: ComponentNode): string {
       return "post";
     case "Repeat":
       return "repeat";
+    case "CircleRing":
+      return "ring_0";
     case "Instance":
       return "instance";
     default: {
@@ -3560,7 +3650,7 @@ function expandRepeat(
       const shifted = {
         ...source,
         id: repeatedId,
-        placement: shiftAnchoredPlacement(source.placement, component.placement.axis, component.placement.step * index),
+        placement: shiftAnchoredPlacement(source.placement as { anchor: { x: number; y: number; z: number }; size: ComponentSize }, component.placement.axis, component.placement.step * index),
       } as Extract<RepeatableComponent, { placement: { anchor: unknown; size: unknown } }>;
 
       nodes.push(...expandRepeatableComponent(shifted, source, component, componentMap, unit));
@@ -3679,6 +3769,8 @@ function expandRepeatableComponent(
           block: material(source, "main", "trim"),
         },
       }];
+    case "CircleRing":
+      throw new ValidationError("CircleRing should be expanded via expandRepeat, not expandRepeatableComponent");
     case "Instance":
       throw new ValidationError("Instance should be expanded via expandRepeat, not expandRepeatableComponent");
     default: {
@@ -3841,10 +3933,10 @@ function material(component: ComponentNode, role: string, fallback: string): str
 }
 
 function shiftAnchoredPlacement(
-  placement: RepeatableComponent["placement"],
+  placement: { anchor: { x: number; y: number; z: number }; size: ComponentSize },
   axis: "x" | "y" | "z",
   distance: number
-): RepeatableComponent["placement"] {
+): { anchor: { x: number; y: number; z: number }; size: ComponentSize } {
   return {
     ...placement,
     anchor: {
@@ -4080,6 +4172,7 @@ function isRepeatableComponent(component: ComponentNode): component is Repeatabl
     component.type === "PathRun" ||
     component.type === "RockCluster" ||
     component.type === "StairRun" ||
+    component.type === "CircleRing" ||
     component.type === "SupportPost" ||
     component.type === "Instance"
   );

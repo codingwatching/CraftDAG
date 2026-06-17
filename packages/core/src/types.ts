@@ -150,6 +150,18 @@ export interface InstancePlacement {
   mirror?: "x" | "z";
 }
 
+export interface CircleRingPlacement {
+  center: { x: number; z: number };
+  y: number;
+  radius: number;
+}
+
+export interface CircleRingOptions {
+  thickness?: number;
+  height?: number;
+  fill?: "hollow" | "solid";
+}
+
 export interface ComponentInput {
   ref: string;
 }
@@ -304,6 +316,7 @@ export interface StairRunOptions {
   includeSideRails?: boolean;
 }
 export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentPlacement, StairRunOptions>;
+export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
 
 export type DoorComponent = BaseComponentNode<"Door", WallAttachmentPlacement>;
 export type WindowComponent = BaseComponentNode<"Window", WallAttachmentPlacement>;
@@ -335,6 +348,7 @@ export type AssemblyComponentNode =
   | PathRunComponent
   | RockClusterComponent
   | StairRunComponent
+  | CircleRingComponent
   | DoorComponent
   | WindowComponent
   | OpeningComponent
