@@ -34,6 +34,8 @@ export function compileDoorway(
   const height = maxY - minY + 1;
   const isDoor = blockState && isDoorBlock(blockState.name);
 
+  const doorWidth = minZ === maxZ ? maxX - minX + 1 : maxZ - minZ + 1;
+
   for (let x = minX; x <= maxX; x++) {
     for (let y = minY; y <= maxY; y++) {
       for (let z = minZ; z <= maxZ; z++) {
@@ -45,10 +47,14 @@ export function compileDoorway(
             continue;
           }
 
+          const doorIndex = minZ === maxZ ? x - minX : z - minZ;
+          const hinge = doorIndex % 2 === 0 ? "left" : "right";
+
           const doorProps: Record<string, string> = {
             ...blockState.properties,
             facing: doorFacing(minX, maxX, minZ, maxZ),
             half: y === minY ? "lower" : "upper",
+            hinge,
           };
 
           const doorState: BlockState = { name: blockState.name, properties: doorProps };
