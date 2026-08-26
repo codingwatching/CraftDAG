@@ -461,6 +461,117 @@ describe("support analysis", () => {
     }));
   });
 
+  it("keeps floating nested children of an Instance(Repeat) assembly blocking when a sibling clone is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Instance Repeat Clone Isolation",
+      bounds: { width: 8, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      assemblies: [{
+        id: "pergola_module",
+        bounds: { width: 5, height: 2, length: 2 },
+        components: [
+          {
+            id: "ledge",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 1, height: 1, length: 1 } },
+          },
+          {
+            id: "row",
+            type: "Repeat",
+            inputs: [{ ref: "ledge" }],
+            placement: { source: "ledge", axis: "x", step: 2, count: 3 },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "pier_a",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 1 } },
+        },
+        {
+          id: "inst",
+          type: "Instance",
+          placement: { assembly: "pergola_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "inst__row__ledge_1__platform")).toEqual([]);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "inst__row__ledge_2__platform",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "inst__row__ledge_2__platform",
+    }));
+  });
+
+  it("carries Repeat may_float structural intent into nested children of Repeat(Instance) clones", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Instance Intent Inheritance",
+      bounds: { width: 8, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      assemblies: [{
+        id: "float_module",
+        bounds: { width: 2, height: 1, length: 2 },
+        components: [{
+          id: "slab",
+          type: "Platform",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 2, height: 1, length: 2 } },
+        }],
+      }],
+      components: [
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "float_module", anchor: { x: 0, y: 4, z: 0 } },
+        },
+        {
+          id: "row",
+          type: "Repeat",
+          placement: { source: "tower", axis: "x", step: 6, count: 2 },
+          structural: { supportPolicy: "may_float" },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+    const withAllowed = analyzeComponentPlanSupport(plan, { includeAllowed: true });
+
+    expect(withAllowed.diagnostics).toContainEqual(expect.objectContaining({
+      code: "ALLOWED_DISCONNECTED_COMPONENT",
+      sourceNodeId: "row__tower_1__slab__platform",
+      supportPolicy: "may_float",
+    }));
+    expect(result.diagnostics.some((diagnostic) =>
+      diagnostic.sourceNodeId.startsWith("row__tower_1") &&
+      (diagnostic.code === "DISCONNECTED_COMPONENT" || diagnostic.code === "FLOATING_SOURCE_NODE")
+    )).toBe(false);
+    expect(result.sourceSummaries.find((summary) => summary.sourceNodeId === "row__tower_1__slab__platform")).toMatchObject({
+      supportPolicy: "may_float",
+    });
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "tower__slab__platform",
+    }));
+    expect(result.sourceSummaries.find((summary) => summary.sourceNodeId === "tower__slab__platform")).toMatchObject({
+      supportPolicy: "must_connect_to_input",
+    });
+  });
+
   it("distinguishes connected side-supported spans from disconnected components", () => {
     const plan = basePlan([
       {
