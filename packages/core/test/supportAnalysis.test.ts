@@ -316,6 +316,151 @@ describe("support analysis", () => {
     }));
   });
 
+  it("keeps floating nested children of a Repeat(Instance) clone blocking when a sibling child is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Instance Clone Isolation",
+      bounds: { width: 12, height: 16, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        trim: "minecraft:oak_log",
+      },
+      assemblies: [{
+        id: "tiered_module",
+        bounds: { width: 3, height: 8, length: 3 },
+        components: [
+          {
+            id: "slab",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 3 } },
+          },
+          {
+            id: "spire",
+            type: "SupportPost",
+            inputs: [{ ref: "slab" }],
+            placement: { anchor: { x: 1, y: 5, z: 1 }, size: { width: 1, height: 2, length: 1 } },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "base_b",
+          type: "Foundation",
+          placement: { anchor: { x: 6, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "tiered_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+        {
+          id: "row",
+          type: "Repeat",
+          placement: { source: "tower", axis: "x", step: 6, count: 2 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "row__tower_1__slab__platform")).toBe(false);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "row__tower_1__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "row__tower_1__spire__post",
+    }));
+  });
+
+  it("keeps floating nested children of RadialRepeat(Instance) clones blocking when sibling children are grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "RadialRepeat Instance Clone Isolation",
+      bounds: { width: 12, height: 16, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        wall: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        trim: "minecraft:oak_log",
+      },
+      assemblies: [{
+        id: "tiered_module",
+        bounds: { width: 3, height: 8, length: 3 },
+        components: [
+          {
+            id: "slab",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 3 } },
+          },
+          {
+            id: "spire",
+            type: "SupportPost",
+            inputs: [{ ref: "slab" }],
+            placement: { anchor: { x: 1, y: 5, z: 1 }, size: { width: 1, height: 2, length: 1 } },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "pad_a",
+          type: "Foundation",
+          placement: { anchor: { x: 9, y: 0, z: 6 }, size: { width: 3, height: 1, length: 3 } },
+        },
+        {
+          id: "pad_b",
+          type: "Foundation",
+          placement: { anchor: { x: 3, y: 0, z: 6 }, size: { width: 3, height: 1, length: 3 } },
+        },
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "tiered_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+        {
+          id: "ring",
+          type: "RadialRepeat",
+          placement: { source: "tower", center: { x: 6, z: 6 }, radius: 3, count: 2 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "ring__tower_0__slab__platform")).toBe(false);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "ring__tower_1__slab__platform")).toBe(false);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ring__tower_0__spire__post",
+    }));
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ring__tower_1__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ring__tower_0__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ring__tower_1__spire__post",
+    }));
+  });
+
   it("distinguishes connected side-supported spans from disconnected components", () => {
     const plan = basePlan([
       {

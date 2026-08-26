@@ -326,7 +326,7 @@ function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStru
   for (const component of rootComponents) {
     collectComponentEntry(entries, component, component.id);
     collectInstanceEntries(entries, component, rootAssemblies, component.id);
-    collectRepeatCloneEntries(entries, component, rootComponentMap, component.id);
+    collectRepeatCloneEntries(entries, component, rootComponentMap, rootAssemblies, component.id);
   }
 
   for (const section of plan.sections ?? []) {
@@ -340,7 +340,7 @@ function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStru
       const prefix = `${section.id}__${component.id}`;
       collectComponentEntry(entries, component, prefix);
       collectInstanceEntries(entries, component, sectionAssemblies, prefix);
-      collectRepeatCloneEntries(entries, component, sectionComponentMap, prefix);
+      collectRepeatCloneEntries(entries, component, sectionComponentMap, sectionAssemblies, prefix);
     }
   }
 
@@ -350,11 +350,14 @@ function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStru
 // Repeat clones are independent placements with their own structural
 // identities: without per-clone entries, a grounded clone marks the shared
 // Repeat ancestor as connected and a floating sibling clone would be
-// misclassified as review-level instead of blocking.
+// misclassified as review-level instead of blocking. Instance-sourced clones
+// must also own nested assembly child entries so a grounded child slab cannot
+// mark the bare clone prefix connected and downgrade a floating sibling child.
 function collectRepeatCloneEntries(
   entries: SourceStructuralEntry[],
   component: ComponentNode,
   componentMap: Map<string, ComponentNode>,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>,
   prefix: string
 ): void {
   if (component.type === "Repeat") {
@@ -363,7 +366,9 @@ function collectRepeatCloneEntries(
       return;
     }
     for (let index = 1; index < component.placement.count; index += 1) {
-      collectComponentEntry(entries, source, `${prefix}__${source.id}_${index}`, component.structural);
+      const clonePrefix = `${prefix}__${source.id}_${index}`;
+      collectComponentEntry(entries, source, clonePrefix, component.structural);
+      collectInstanceEntries(entries, source, assemblyMap, clonePrefix);
     }
     return;
   }
@@ -374,7 +379,9 @@ function collectRepeatCloneEntries(
       return;
     }
     for (let index = 0; index < component.placement.count; index += 1) {
-      collectComponentEntry(entries, source, `${prefix}__${source.id}_${index}`, component.structural);
+      const clonePrefix = `${prefix}__${source.id}_${index}`;
+      collectComponentEntry(entries, source, clonePrefix, component.structural);
+      collectInstanceEntries(entries, source, assemblyMap, clonePrefix);
     }
   }
 }
