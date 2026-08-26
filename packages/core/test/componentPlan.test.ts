@@ -1653,8 +1653,8 @@ describe("ComponentPlan", () => {
     expect(craftDag.nodes[10]).toMatchObject({
       id: "main_stair__left_handrail_step_3",
       params: {
-        from: [2, 5, 9],
-        to: [2, 5, 10],
+        from: [2, 4, 9],
+        to: [2, 4, 10],
       },
     });
     const railCells = new Set(
@@ -1678,7 +1678,16 @@ describe("ComponentPlan", () => {
       const [x, y] = cell.split(",").map(Number);
       expect(x === 2 || x === 4).toBe(true);
       expect(y).toBeGreaterThanOrEqual(2);
-      expect(y).toBeLessThanOrEqual(5);
+      expect(y).toBeLessThanOrEqual(4);
+    }
+    for (const node of craftDag.nodes) {
+      const { from, to } = node.params;
+      expect(from[0]).toBeGreaterThanOrEqual(2);
+      expect(to[0]).toBeLessThanOrEqual(2 + 3 - 1);
+      expect(from[1]).toBeGreaterThanOrEqual(1);
+      expect(to[1]).toBeLessThanOrEqual(1 + 4 - 1);
+      expect(from[2]).toBeGreaterThanOrEqual(3);
+      expect(to[2]).toBeLessThanOrEqual(3 + 8 - 1);
     }
     expect(() => compileComponentPlan(plan)).not.toThrow();
   });
@@ -1800,6 +1809,41 @@ describe("ComponentPlan", () => {
     };
 
     expect(() => validateComponentPlan(plan)).toThrow(/bandWidth|interior/);
+  });
+
+  it("rejects RectRing heights exceeding the placement and keeps flat rings compatible", () => {
+    const basePlan = (options?: { bandWidth?: number; height?: number }): ComponentPlanDocument => ({
+      version: "0.1",
+      name: "Rect Ring Height Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: {
+        roof: "minecraft:green_concrete",
+      },
+      components: [
+        {
+          id: "eave_ring",
+          type: "RectRing",
+          placement: { anchor: { x: 2, y: 2, z: 2 }, size: { width: 8, height: 3, length: 8 } },
+          ...(options ? { options } : {}),
+        },
+      ],
+    });
+
+    expect(() => validateComponentPlan(basePlan({ height: 4 }))).toThrow(/height/i);
+    expect(() => validateComponentPlan(basePlan({ height: 3 }))).not.toThrow();
+
+    const fittingDag = expandComponentPlan(basePlan({ height: 3 }));
+    for (const node of fittingDag.nodes) {
+      expect(node.params.from[1]).toBe(2);
+      expect(node.params.to[1]).toBe(4);
+    }
+
+    const flatDag = expandComponentPlan(basePlan());
+    for (const node of flatDag.nodes) {
+      expect(node.params.from[1]).toBe(2);
+      expect(node.params.to[1]).toBe(2);
+    }
+    expect(() => compileComponentPlan(basePlan())).not.toThrow();
   });
 
   it("expands Light components for interior utility lighting", () => {

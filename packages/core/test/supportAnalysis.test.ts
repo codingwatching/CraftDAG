@@ -267,6 +267,55 @@ describe("support analysis", () => {
     expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "tower__slab__platform")).toEqual([]);
   });
 
+  it("keeps a floating Repeat clone blocking when a sibling clone is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Clone Isolation",
+      bounds: { width: 12, height: 12, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      components: [
+        {
+          id: "pier_a",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 8 } },
+        },
+        {
+          id: "pier_b",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 8 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "ledge",
+          type: "Platform",
+          inputs: [{ ref: "pier_a" }],
+          placement: { anchor: { x: 0, y: 1, z: 6 }, size: { width: 2, height: 1, length: 1 } },
+        },
+        {
+          id: "ledge_row",
+          type: "Repeat",
+          inputs: [{ ref: "pier_b" }],
+          placement: { source: "ledge", axis: "z", step: 3, count: 3 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "ledge_row__ledge_1__platform")).toEqual([]);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ledge_row__ledge_2__platform",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ledge_row__ledge_2__platform",
+    }));
+  });
+
   it("distinguishes connected side-supported spans from disconnected components", () => {
     const plan = basePlan([
       {

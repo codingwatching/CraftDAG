@@ -165,8 +165,9 @@ function analyzeVoxelSupportInternal(
     const sourceNodeId = block.sourceNodeId ?? "unknown";
     return hasConnectedKnownAncestor(sourceNodeId, knownParentPrefixes, connectedAncestorPrefixes);
   });
+  const reviewDisconnectedSet = new Set(reviewDisconnected);
   const blockingDisconnected = disconnected.filter((block) => {
-    return !reviewDisconnected.includes(block);
+    return !reviewDisconnectedSet.has(block);
   });
   const diagnostics = [
     ...groupsToDiagnostics(
@@ -319,10 +320,13 @@ export function defaultStructuralIntentForComponent(component: ComponentNode): R
 function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStructuralEntry[] {
   const entries: SourceStructuralEntry[] = [];
   const rootAssemblies = new Map((plan.assemblies ?? []).map((assembly) => [assembly.id, assembly]));
+  const rootComponents = plan.components ?? [];
+  const rootComponentMap = new Map(rootComponents.map((component) => [component.id, component]));
 
-  for (const component of plan.components ?? []) {
+  for (const component of rootComponents) {
     collectComponentEntry(entries, component, component.id);
     collectInstanceEntries(entries, component, rootAssemblies, component.id);
+    collectRepeatCloneEntries(entries, component, rootComponentMap, component.id);
   }
 
   for (const section of plan.sections ?? []) {
@@ -330,15 +334,49 @@ function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStru
     for (const assembly of section.assemblies ?? []) {
       sectionAssemblies.set(assembly.id, assembly);
     }
+    const sectionComponentMap = new Map(section.components.map((component) => [component.id, component]));
 
     for (const component of section.components) {
       const prefix = `${section.id}__${component.id}`;
       collectComponentEntry(entries, component, prefix);
       collectInstanceEntries(entries, component, sectionAssemblies, prefix);
+      collectRepeatCloneEntries(entries, component, sectionComponentMap, prefix);
     }
   }
 
   return entries.sort((a, b) => b.prefix.length - a.prefix.length);
+}
+
+// Repeat clones are independent placements with their own structural
+// identities: without per-clone entries, a grounded clone marks the shared
+// Repeat ancestor as connected and a floating sibling clone would be
+// misclassified as review-level instead of blocking.
+function collectRepeatCloneEntries(
+  entries: SourceStructuralEntry[],
+  component: ComponentNode,
+  componentMap: Map<string, ComponentNode>,
+  prefix: string
+): void {
+  if (component.type === "Repeat") {
+    const source = componentMap.get(component.placement.source);
+    if (!source) {
+      return;
+    }
+    for (let index = 1; index < component.placement.count; index += 1) {
+      collectComponentEntry(entries, source, `${prefix}__${source.id}_${index}`, component.structural);
+    }
+    return;
+  }
+
+  if (component.type === "RadialRepeat") {
+    const source = componentMap.get(component.placement.source);
+    if (!source) {
+      return;
+    }
+    for (let index = 0; index < component.placement.count; index += 1) {
+      collectComponentEntry(entries, source, `${prefix}__${source.id}_${index}`, component.structural);
+    }
+  }
 }
 
 function collectInstanceEntries(
