@@ -2563,6 +2563,7 @@ function validateShapeComponent(component: ComponentNode): void {
   if (component.type === "RectRing") {
     const { width, length, height } = component.placement.size;
     const band = component.options?.bandWidth ?? 1;
+    const ringHeight = component.options?.height;
 
     if (width - band * 2 < 1 || length - band * 2 < 1) {
       throw componentValidationError({
@@ -2580,6 +2581,15 @@ function validateShapeComponent(component: ComponentNode): void {
         componentId: component.id,
         message: `RectRing "${component.id}" cornerRise exceeds the placement height.`,
         repairHint: "Increase placement.size.height to at least options.height + options.cornerRise, or reduce options.cornerRise.",
+      });
+    }
+
+    if (ringHeight !== undefined && ringHeight > height) {
+      throw componentValidationError({
+        code: "INVALID_RECT_RING_HEIGHT",
+        componentId: component.id,
+        message: `RectRing "${component.id}" options.height ${ringHeight} exceeds placement.size.height ${height}.`,
+        repairHint: "Reduce options.height or increase placement.size.height so ring walls stay inside the declared footprint.",
       });
     }
   }
@@ -3647,10 +3657,13 @@ function appendStairHandrailPlacements(
     const start = direction === "positive"
       ? stepStart
       : runLength - stepEnd;
+    // Deliberate clamp: handrails must stay within placement.size.height,
+    // so the top rail level merges with the top tread level.
+    const railYOffset = Math.min(step + 1, size.height - 1);
 
     placements.push({
       part: `left_handrail_step_${step}`,
-      anchor: stairPlacementAnchor(anchor, axis, start, 0, step + 1),
+      anchor: stairPlacementAnchor(anchor, axis, start, 0, railYOffset),
       size: stairPlacementSize(axis, treadDepth, 1, 1),
       materialRole: "rail",
       materialFallback: "trim",
@@ -3659,7 +3672,7 @@ function appendStairHandrailPlacements(
     if (crossWidth > 1) {
       placements.push({
         part: `right_handrail_step_${step}`,
-        anchor: stairPlacementAnchor(anchor, axis, start, crossWidth - 1, step + 1),
+        anchor: stairPlacementAnchor(anchor, axis, start, crossWidth - 1, railYOffset),
         size: stairPlacementSize(axis, treadDepth, 1, 1),
         materialRole: "rail",
         materialFallback: "trim",

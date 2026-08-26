@@ -168,8 +168,9 @@ function analyzeVoxelSupportInternal(
     const sourceNodeId = block.sourceNodeId ?? "unknown";
     return hasConnectedKnownAncestor(sourceNodeId, knownParentPrefixes, connectedAncestorPrefixes);
   });
+  const reviewDisconnectedSet = new Set(reviewDisconnected);
   const blockingDisconnected = disconnected.filter((block) => {
-    return !reviewDisconnected.includes(block);
+    return !reviewDisconnectedSet.has(block);
   });
   const diagnostics = [
     ...groupsToDiagnostics(
@@ -321,13 +322,30 @@ export function defaultStructuralIntentForComponent(component: ComponentNode): R
   }
 }
 
+// Structural entries must mirror the expanded node-id tree: repeat clones and
+// instance assembly children are independent placements whose entries prevent
+// a grounded sibling from marking the shared ancestor prefix connected and
+// downgrading a floating sibling from blocking to review-level. Collection
+// recurses through Instance assemblies and Repeat/RadialRepeat clones,
+// carrying inherited intent with explicit child > Instance > Repeat > default
+// precedence.
+const MAX_STRUCTURAL_ENTRY_DEPTH = 16;
+const NO_ASSEMBLIES = new Map<string, ComponentAssemblyDefinition>();
+
+interface InheritedStructuralIntent {
+  instanceIntent?: ComponentStructuralIntent;
+  repeatIntent?: ComponentStructuralIntent;
+}
+
 function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStructuralEntry[] {
   const entries: SourceStructuralEntry[] = [];
+  const registeredPrefixes = new Set<string>();
   const rootAssemblies = new Map((plan.assemblies ?? []).map((assembly) => [assembly.id, assembly]));
+  const rootComponents = plan.components ?? [];
+  const rootComponentMap = new Map(rootComponents.map((component) => [component.id, component]));
 
-  for (const component of plan.components ?? []) {
-    collectComponentEntry(entries, component, component.id);
-    collectInstanceEntries(entries, component, rootAssemblies, component.id);
+  for (const component of rootComponents) {
+    collectStructuralEntryTree(entries, registeredPrefixes, component, rootComponentMap, rootAssemblies, component.id);
   }
 
   for (const section of plan.sections ?? []) {
@@ -335,34 +353,99 @@ function collectSourceStructuralEntries(plan: ComponentPlanDocument): SourceStru
     for (const assembly of section.assemblies ?? []) {
       sectionAssemblies.set(assembly.id, assembly);
     }
+    const sectionComponentMap = new Map(section.components.map((component) => [component.id, component]));
 
     for (const component of section.components) {
       const prefix = `${section.id}__${component.id}`;
-      collectComponentEntry(entries, component, prefix);
-      collectInstanceEntries(entries, component, sectionAssemblies, prefix);
+      collectStructuralEntryTree(entries, registeredPrefixes, component, sectionComponentMap, sectionAssemblies, prefix);
     }
   }
 
   return entries.sort((a, b) => b.prefix.length - a.prefix.length);
 }
 
-function collectInstanceEntries(
+function collectStructuralEntryTree(
   entries: SourceStructuralEntry[],
+  registeredPrefixes: Set<string>,
   component: ComponentNode,
+  componentMap: Map<string, ComponentNode>,
   assemblyMap: Map<string, ComponentAssemblyDefinition>,
-  prefix: string
+  prefix: string,
+  inherited: InheritedStructuralIntent = {},
+  depth = 0
 ): void {
-  if (component.type !== "Instance") {
+  if (depth > MAX_STRUCTURAL_ENTRY_DEPTH || registeredPrefixes.has(prefix)) {
     return;
   }
-  const assembly = assemblyMap.get(component.placement.assembly);
-  if (!assembly) {
+  registeredPrefixes.add(prefix);
+  collectComponentEntry(entries, component, prefix, mergeInheritedIntent(inherited));
+
+  if (component.type === "Instance") {
+    const assembly = assemblyMap.get(component.placement.assembly);
+    if (!assembly) {
+      return;
+    }
+    // Nested scope mirrors expansion: assembly members resolve siblings
+    // locally and cannot reference outer components or assemblies.
+    const assemblyComponentMap = new Map(assembly.components.map((member) => [member.id, member]));
+    const nestedInherited: InheritedStructuralIntent = {
+      ...inherited,
+      instanceIntent: mergeStructuralIntent(inherited.instanceIntent, component.structural),
+    };
+    for (const assemblyComponent of assembly.components) {
+      collectStructuralEntryTree(
+        entries,
+        registeredPrefixes,
+        assemblyComponent,
+        assemblyComponentMap,
+        NO_ASSEMBLIES,
+        `${prefix}__${assemblyComponent.id}`,
+        nestedInherited,
+        depth + 1
+      );
+    }
     return;
   }
-  const instanceStructural = component.structural;
-  for (const assemblyComponent of assembly.components) {
-    collectComponentEntry(entries, assemblyComponent, `${prefix}__${assemblyComponent.id}`, instanceStructural);
+
+  if (component.type === "Repeat" || component.type === "RadialRepeat") {
+    const source = componentMap.get(component.placement.source);
+    if (!source) {
+      return;
+    }
+    // Linear repeats keep the original source placement at index 0, radial
+    // clones replace it entirely; both share the clone id scheme.
+    const startIndex = component.type === "Repeat" ? 1 : 0;
+    const nestedInherited: InheritedStructuralIntent = {
+      ...inherited,
+      repeatIntent: mergeStructuralIntent(inherited.repeatIntent, component.structural),
+    };
+    for (let index = startIndex; index < component.placement.count; index += 1) {
+      collectStructuralEntryTree(
+        entries,
+        registeredPrefixes,
+        source,
+        componentMap,
+        assemblyMap,
+        `${prefix}__${source.id}_${index}`,
+        nestedInherited,
+        depth + 1
+      );
+    }
   }
+}
+
+function mergeStructuralIntent(
+  base?: ComponentStructuralIntent,
+  override?: ComponentStructuralIntent
+): ComponentStructuralIntent | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+  return { ...base, ...override };
+}
+
+function mergeInheritedIntent(inherited: InheritedStructuralIntent): ComponentStructuralIntent | undefined {
+  return mergeStructuralIntent(inherited.repeatIntent, inherited.instanceIntent);
 }
 
 function collectComponentEntry(
