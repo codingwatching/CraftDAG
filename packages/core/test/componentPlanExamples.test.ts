@@ -19,6 +19,7 @@ describe("ComponentPlan large examples", () => {
     "eave-ring-study.componentplan.json",
     "fortified-wall-shape.componentplan.json",
     "giant-wild-goose-pagoda-study.componentplan.json",
+    "pagoda-eave-flare-study.componentplan.json",
     "large-form-massing.componentplan.json",
     "landscape-canopy-patch.componentplan.json",
     "large-castle.componentplan.json",

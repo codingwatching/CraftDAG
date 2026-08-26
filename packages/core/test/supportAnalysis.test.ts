@@ -662,6 +662,90 @@ describe("support analysis", () => {
       bounds: { min: [2, 5, 2], max: [2, 5, 17] },
     }));
   });
+  it("flags a declared-input component bearing on the structure through a single face", () => {
+    const plan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+      },
+      {
+        id: "mast",
+        type: "SupportPost",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 1, y: 1, z: 1 }, size: { width: 1, height: 3, length: 1 } },
+      },
+    ]);
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.summary.qualityGate.status).toBe("review");
+    expect(result.summary.diagnostics.byCode.MINIMAL_ATTACHMENT).toBe(1);
+    expect(result.summary.qualityGate.reviewReasons).toContain("MINIMAL_ATTACHMENT");
+    const diagnostic = result.diagnostics.find((entry) => entry.code === "MINIMAL_ATTACHMENT");
+    expect(diagnostic).toMatchObject({
+      severity: "warning",
+      stage: "support-analysis",
+      componentId: "mast",
+      sourceNodeId: "mast",
+    });
+    expect(diagnostic?.repairHint).toMatch(/brackets|structural intent/);
+  });
+
+  it("keeps MINIMAL_ATTACHMENT quiet for wide bearing surfaces and decorative intent", () => {
+    const widePlan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+      },
+      {
+        id: "deck",
+        type: "Platform",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 0, y: 1, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+      },
+    ]);
+    const wideResult = analyzeComponentPlanSupport(widePlan);
+    expect(wideResult.summary.qualityGate.status).toBe("pass");
+    expect(wideResult.summary.diagnostics.byCode.MINIMAL_ATTACHMENT).toBeUndefined();
+
+    const thinDecorativePlan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+      },
+      {
+        id: "mast",
+        type: "SupportPost",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 1, y: 1, z: 1 }, size: { width: 1, height: 3, length: 1 } },
+        structural: { supportPolicy: "decorative" },
+      },
+    ]);
+    const decorativeResult = analyzeComponentPlanSupport(thinDecorativePlan);
+    expect(decorativeResult.summary.diagnostics.byCode.MINIMAL_ATTACHMENT).toBeUndefined();
+  });
+
+  it("honors minAttachmentContacts when assessing attachment quality", () => {
+    const plan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+      },
+      {
+        id: "mast",
+        type: "SupportPost",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 1, y: 1, z: 1 }, size: { width: 1, height: 3, length: 1 } },
+      },
+    ]);
+
+    const lenient = analyzeComponentPlanSupport(plan, { minAttachmentContacts: 1 });
+    expect(lenient.summary.diagnostics.byCode.MINIMAL_ATTACHMENT).toBeUndefined();
+  });
 });
 
 function block(pos: [number, number, number], sourceNodeId: string): VoxelBlock {

@@ -239,7 +239,9 @@ Use `VerticalSetbackVolume` for tall landmark massing with discrete setbacks, su
 
 Use `SteppedDome` for bounded Minecraft-style dome approximations, such as Taj-style central domes, temple or mosque roofs, observatories, rotundas, and fantasy tower caps. It expands into stacked shrinking tiers inside one anchored box. Use it when the authoring intent is a dome-like roof or cap; use `SteppedTier` for horizontal terraces and `VerticalSetbackVolume` for tall setback towers. Do not add landmark-specific dome component types.
 
-Use `RectRing` for rectangular ring bands around an open interior: eave bands on tiered towers and pagoda-style roofs, cornices, parapets, plinth bands, balcony fascias, and trim frames around courtyards or roof plates. It is the rectangular counterpart to `CircleRing` and expands into at most four axis-aligned band boxes (`ring_front`, `ring_back`, `ring_left`, `ring_right`) inside one anchored bounding box. Use `options.bandWidth` for the inward band thickness and `options.height` for the band height. The band must leave at least a one-block open interior; use `Platform` instead when the surface should be a full slab. Corner flares and curved profiles are intentionally out of scope; pair it with `SteppedDome` or `CircleRing` for curved caps.
+Use `RectRing` for rectangular ring bands around an open interior: eave bands on tiered towers and pagoda-style roofs, cornices, parapets, plinth bands, balcony fascias, and trim frames around courtyards or roof plates. It is the rectangular counterpart to `CircleRing` and expands into at most four axis-aligned band boxes (`ring_front`, `ring_back`, `ring_left`, `ring_right`) inside one anchored bounding box. Use `options.bandWidth` for the inward band thickness and `options.height` for the band height. The band must leave at least a one-block open interior; use `Platform` instead when the surface should be a full slab. Pair it with `SteppedDome` or `CircleRing` for curved caps.
+
+For stepped eave curvature, set `options.cornerRise` to a small non-negative integer: each corner column gains up to that many extra blocks above `options.height`, stepping down over `options.riseSpan` columns (defaults to `cornerRise`, one block per step) toward the middle of each edge. This approximates curved eave edges and corner uplift with deterministic integer segments named `ring_<side>_seg<n>`; keep the ring's inner hole aligned with the tower cross-section at that height so the band bears on the walls. The placement must declare vertical room (`options.height + options.cornerRise <= placement.size.height`) or validation rejects the plan. Flat rings without `cornerRise` expand exactly as before.
 
 Use `RailingRun` for repeated posts plus horizontal rails along bridges, decks, walls, balconies, and platforms. It is a bounded run, not a fence/pathfinding simulator. Use `postSpacing`, `includeTopRail`, and `includeMidRail` for controlled detail.
 
@@ -690,6 +692,7 @@ The analyzer reports:
 - `DISCONNECTED_COMPONENT`: blocks are not connected to configured support roots.
 - `FLOATING_SOURCE_NODE`: a source node contributes disconnected blocks.
 - `LARGE_CANTILEVER`: connected blocks exceed the configured `maxCantilever` distance from nearby vertical support.
+- `MINIMAL_ATTACHMENT`: a component that declares `inputs` and uses `must_connect_to_input` or `must_connect_to_ground` connects to the rest of the build through fewer than `minAttachmentContacts` (default 2) shared faces, such as an eave ring resting on a single corner block.
 - `NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED`: blocks have air below but remain connected through adjacent blocks, such as bridge spans or rails.
 - `ALLOWED_*`: the same condition is allowed by `structural.supportPolicy` when `includeAllowed: true`.
 
@@ -719,8 +722,10 @@ The result includes a `summary` field for agent and product quality gates:
 Quality gate status is conservative:
 
 - `block`: at least one unallowed `DISCONNECTED_COMPONENT` or `FLOATING_SOURCE_NODE`.
-- `review`: no blocking diagnostics, but at least one `LARGE_CANTILEVER` or `NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED`.
+- `review`: no blocking diagnostics, but at least one `LARGE_CANTILEVER`, `MINIMAL_ATTACHMENT`, or `NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED`.
 - `pass`: no blocking or review diagnostics. Allowed diagnostics do not downgrade the status.
+
+Components without declared `inputs`, and components using `decorative` or `may_float` policies, are exempt from `MINIMAL_ATTACHMENT`; standalone foundations and intentional decorations stay quiet.
 
 The result also includes `sourceSummaries`, which aggregate total blocks, bounds, disconnected block counts, vertical unsupported counts, and large cantilever counts by `sourceNodeId`.
 
