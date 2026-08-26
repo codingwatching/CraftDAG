@@ -20,6 +20,7 @@ export type SupportDiagnosticCode =
   | "DISCONNECTED_COMPONENT"
   | "FLOATING_SOURCE_NODE"
   | "LARGE_CANTILEVER"
+  | "MINIMAL_ATTACHMENT"
   | "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED";
 
 export interface SupportDiagnostic extends Diagnostic {
@@ -81,6 +82,7 @@ export interface SupportAnalysisOptions {
   maxDiagnosticsPerSource?: number;
   minDiagnosticBlocks?: number;
   maxCantilever?: number;
+  minAttachmentContacts?: number;
 }
 
 export interface SupportAnalysisResult {
@@ -96,6 +98,7 @@ export interface SupportAnalysisResult {
 interface SourceStructuralEntry {
   prefix: string;
   componentId: string;
+  declaredInputs: boolean;
   structural: Required<Pick<ComponentStructuralIntent, "supportPolicy">> & ComponentStructuralIntent;
 }
 
@@ -205,6 +208,7 @@ function analyzeVoxelSupportInternal(
       "This may be acceptable for rails, roofs, bridges, or spans. Add structural intent if it is intentional.",
       options
     ),
+    ...findMinimalAttachmentDiagnostics(blocks, blockMap, connected, options),
   ];
 
   const limitedDiagnostics = limitDiagnostics(diagnostics, options.maxDiagnosticsPerCode ?? 20, options.maxDiagnosticsPerSource);
@@ -237,6 +241,7 @@ export function classifySupportDiagnostic(diagnostic: SupportDiagnostic): Suppor
     case "FLOATING_SOURCE_NODE":
       return "blocking";
     case "LARGE_CANTILEVER":
+    case "MINIMAL_ATTACHMENT":
     case "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED":
       return "review";
     default:
@@ -291,7 +296,7 @@ function blockingReasonCodes(byCode: Record<string, number>): string[] {
 }
 
 function reviewReasonCodes(byCode: Record<string, number>): string[] {
-  return ["LARGE_CANTILEVER", "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED"].filter((code) => (byCode[code] ?? 0) > 0);
+  return ["LARGE_CANTILEVER", "MINIMAL_ATTACHMENT", "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED"].filter((code) => (byCode[code] ?? 0) > 0);
 }
 
 export function defaultStructuralIntentForComponent(component: ComponentNode): Required<Pick<ComponentStructuralIntent, "supportPolicy">> & ComponentStructuralIntent {
@@ -462,6 +467,7 @@ function collectComponentEntry(
   entries.push({
     prefix,
     componentId: component.id,
+    declaredInputs: (component.inputs?.length ?? 0) > 0,
     structural,
   });
 }
@@ -582,6 +588,116 @@ function countBySource(blocks: VoxelBlock[]): Map<string, number> {
     counts.set(sourceNodeId, (counts.get(sourceNodeId) ?? 0) + 1);
   }
   return counts;
+}
+
+function findMinimalAttachmentDiagnostics(
+  blocks: VoxelBlock[],
+  blockMap: Map<string, VoxelBlock>,
+  connected: Set<string>,
+  options: InternalSupportAnalysisOptions
+): SupportDiagnostic[] {
+  const sourceStructural = options.sourceStructural ?? [];
+  const strictEntries = sourceStructural.filter((entry) => (
+    entry.declaredInputs &&
+    (entry.structural.supportPolicy === "must_connect_to_input" || entry.structural.supportPolicy === "must_connect_to_ground")
+  ));
+  if (strictEntries.length === 0) {
+    return [];
+  }
+
+  const minContacts = options.minAttachmentContacts ?? 2;
+  const ignoredSourceNodeIdPrefixes = options.ignoredSourceNodeIdPrefixes ?? [];
+  const ownerByPos = new Map<string, string>();
+  for (const block of blocks) {
+    ownerByPos.set(posKey(block.pos), resolveOwnerPrefix(block.sourceNodeId ?? "unknown", sourceStructural));
+  }
+
+  interface OwnerStats {
+    totalBlocks: number;
+    connectedBlocks: number;
+    bounds: SupportAnalysisBounds;
+  }
+  const statsByOwner = new Map<string, OwnerStats>();
+  for (const block of blocks) {
+    const key = posKey(block.pos);
+    const owner = ownerByPos.get(key);
+    if (owner === undefined) {
+      continue;
+    }
+    const stats = statsByOwner.get(owner) ?? {
+      totalBlocks: 0,
+      connectedBlocks: 0,
+      bounds: { min: [...block.pos] as Vec3, max: [...block.pos] as Vec3 },
+    };
+    stats.totalBlocks += 1;
+    if (connected.has(key)) {
+      stats.connectedBlocks += 1;
+    }
+    for (let index = 0; index < 3; index++) {
+      stats.bounds.min[index] = Math.min(stats.bounds.min[index], block.pos[index]);
+      stats.bounds.max[index] = Math.max(stats.bounds.max[index], block.pos[index]);
+    }
+    statsByOwner.set(owner, stats);
+  }
+
+  const contactCounts = new Map<string, number>();
+  for (const block of blocks) {
+    const [x, y, z] = block.pos;
+    const owner = ownerByPos.get(posKey(block.pos));
+    if (owner === undefined) {
+      continue;
+    }
+    for (const neighbor of [[x + 1, y, z], [x, y + 1, z], [x, y, z + 1]] as Vec3[]) {
+      const neighborKey = posKey(neighbor);
+      if (!blockMap.has(neighborKey)) {
+        continue;
+      }
+      const neighborOwner = ownerByPos.get(neighborKey);
+      if (neighborOwner === undefined || neighborOwner === owner) {
+        continue;
+      }
+      contactCounts.set(owner, (contactCounts.get(owner) ?? 0) + 1);
+      contactCounts.set(neighborOwner, (contactCounts.get(neighborOwner) ?? 0) + 1);
+    }
+  }
+
+  const diagnostics: SupportDiagnostic[] = [];
+  for (const entry of strictEntries) {
+    const stats = statsByOwner.get(entry.prefix);
+    if (!stats || stats.connectedBlocks === 0) {
+      continue;
+    }
+    if (ignoredSourceNodeIdPrefixes.some((prefix) => entry.prefix.startsWith(prefix))) {
+      continue;
+    }
+
+    const contacts = contactCounts.get(entry.prefix) ?? 0;
+    if (contacts >= minContacts) {
+      continue;
+    }
+
+    diagnostics.push({
+      severity: "warning",
+      stage: "support-analysis",
+      code: "MINIMAL_ATTACHMENT",
+      message: `Component "${entry.componentId}" attaches to other components through ${contacts} shared face${contacts === 1 ? "" : "s"}.`,
+      repairHint: "Widen the bearing surface or add posts/brackets under roof frames and eaves, or set explicit structural intent if this thin attachment is intentional.",
+      sourceNodeId: entry.prefix,
+      componentId: entry.componentId,
+      count: stats.totalBlocks,
+      bounds: stats.bounds,
+      supportPolicy: entry.structural.supportPolicy,
+      supportRoots: entry.structural.supportRoots,
+      maxCantilever: entry.structural.maxCantilever,
+    });
+  }
+
+  return diagnostics;
+}
+
+function resolveOwnerPrefix(sourceNodeId: string, entries: SourceStructuralEntry[]): string {
+  const entry = entries.find((candidate) => sourceNodeId === candidate.prefix || sourceNodeId.startsWith(`${candidate.prefix}__`));
+  return entry ? entry.prefix : sourceNodeId;
 }
 
 function findLargeCantileverBlocks(

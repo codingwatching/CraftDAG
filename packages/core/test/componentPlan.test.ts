@@ -1811,6 +1811,253 @@ describe("ComponentPlan", () => {
     expect(() => validateComponentPlan(plan)).toThrow(/bandWidth|interior/);
   });
 
+  it("expands RectRing cornerRise into stepped eave segments rising toward corners", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Eave Flare Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete" },
+      components: [
+        {
+          id: "flared_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 2, y: 4, z: 2 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1, cornerRise: 2 },
+          materials: { main: "roof" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+
+    expect(craftDag.nodes.map((node) => node.id)).toEqual([
+      "flared_eave__ring_front_seg0",
+      "flared_eave__ring_front_seg1",
+      "flared_eave__ring_front_seg2",
+      "flared_eave__ring_front_seg3",
+      "flared_eave__ring_front_seg4",
+      "flared_eave__ring_back_seg0",
+      "flared_eave__ring_back_seg1",
+      "flared_eave__ring_back_seg2",
+      "flared_eave__ring_back_seg3",
+      "flared_eave__ring_back_seg4",
+      "flared_eave__ring_left_seg0",
+      "flared_eave__ring_left_seg1",
+      "flared_eave__ring_left_seg2",
+      "flared_eave__ring_left_seg3",
+      "flared_eave__ring_left_seg4",
+      "flared_eave__ring_right_seg0",
+      "flared_eave__ring_right_seg1",
+      "flared_eave__ring_right_seg2",
+      "flared_eave__ring_right_seg3",
+      "flared_eave__ring_right_seg4",
+    ]);
+
+    expect(craftDag.nodes[0]).toMatchObject({
+      params: { from: [2, 4, 2], to: [2, 6, 2] },
+    });
+    expect(craftDag.nodes[1]).toMatchObject({
+      params: { from: [3, 4, 2], to: [3, 5, 2] },
+    });
+    expect(craftDag.nodes[2]).toMatchObject({
+      params: { from: [4, 4, 2], to: [7, 4, 2] },
+    });
+    expect(craftDag.nodes[10]).toMatchObject({
+      params: { from: [2, 4, 3], to: [2, 6, 3] },
+    });
+    expect(craftDag.nodes[12]).toMatchObject({
+      params: { from: [2, 4, 5], to: [2, 4, 6] },
+    });
+    expect(craftDag.nodes[15]).toMatchObject({
+      params: { from: [9, 4, 3], to: [9, 6, 3] },
+    });
+
+    const occupied = new Set(
+      craftDag.nodes.flatMap((node) => {
+        const { from, to } = (node.params as { from: number[]; to: number[] });
+        const cells: string[] = [];
+        for (let x = from[0]; x <= to[0]; x++) {
+          for (let y = from[1]; y <= to[1]; y++) {
+            for (let z = from[2]; z <= to[2]; z++) {
+              cells.push(`${x},${y},${z}`);
+            }
+          }
+        }
+        return cells;
+      })
+    );
+    expect(occupied.size).toBe(52);
+
+    expect(() => compileComponentPlan(plan)).not.toThrow();
+  });
+
+  it("stretches the corner rise ramp with riseSpan while keeping symmetry", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Eave Flare Span Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete" },
+      components: [
+        {
+          id: "gentle_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 2, y: 4, z: 2 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1, cornerRise: 2, riseSpan: 4 },
+          materials: { main: "roof" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const frontSegments = craftDag.nodes.filter((node) => node.id.startsWith("gentle_eave__ring_front_"));
+
+    expect(frontSegments).toHaveLength(3);
+    expect(frontSegments.map((node) => {
+      const params = node.params as { from: number[]; to: number[] };
+      return { from: params.from, to: params.to };
+    })).toEqual([
+      { from: [2, 4, 2], to: [3, 6, 2] },
+      { from: [4, 4, 2], to: [7, 5, 2] },
+      { from: [8, 4, 2], to: [9, 6, 2] },
+    ]);
+  });
+
+  it("rejects RectRing cornerRise taller than the placement height", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Broken Eave Flare Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete" },
+      components: [
+        {
+          id: "tall_flare",
+          type: "RectRing",
+          placement: { anchor: { x: 2, y: 4, z: 2 }, size: { width: 8, height: 2, length: 8 } },
+          options: { bandWidth: 1, height: 1, cornerRise: 2 },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(plan)).toThrow(/cornerRise/);
+  });
+
+  it("connects consumers of a cornerRise RectRing to every emitted eave segment", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Eave Bearing Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+      components: [
+        {
+          id: "flared_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1, cornerRise: 2 },
+          materials: { main: "roof" },
+        },
+        {
+          id: "cupola",
+          type: "Platform",
+          inputs: [{ ref: "flared_eave" }],
+          placement: { anchor: { x: 6, y: 9, z: 6 }, size: { width: 4, height: 1, length: 4 } },
+          materials: { main: "wall" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const eaveSegmentIds = craftDag.nodes
+      .filter((node) => node.id.startsWith("flared_eave__"))
+      .map((node) => node.id)
+      .sort();
+    const cupolaInputs = craftDag.nodes
+      .find((node) => node.id === "cupola__platform")!
+      .inputs!.map((input) => input.ref)
+      .sort();
+
+    expect(eaveSegmentIds.length).toBe(20);
+    expect(cupolaInputs).toEqual(eaveSegmentIds);
+  });
+
+  it("keeps consumers of a flat RectRing attached only to the legacy front band", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Flat Eave Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+      components: [
+        {
+          id: "flat_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1 },
+          materials: { main: "roof" },
+        },
+        {
+          id: "cupola",
+          type: "Platform",
+          inputs: [{ ref: "flat_eave" }],
+          placement: { anchor: { x: 6, y: 9, z: 6 }, size: { width: 4, height: 1, length: 4 } },
+          materials: { main: "wall" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const cupolaInputs = craftDag.nodes.find((node) => node.id === "cupola__platform")!.inputs!;
+
+    expect(cupolaInputs).toEqual([{ ref: "flat_eave__ring_front" }]);
+  });
+
+  it("resolves every expanded input ref to an emitted node across RectRing configurations", () => {
+    const widths = [8, 9, 12];
+    const rises = [0, 1, 2, 3];
+    const riseSpans = [undefined, 2, 5];
+
+    for (const width of widths) {
+      for (const cornerRise of rises) {
+        for (const riseSpan of riseSpans) {
+          if (cornerRise === 0 && riseSpan !== undefined) continue;
+
+          const plan: ComponentPlanDocument = {
+            version: "0.1",
+            name: `Rect Ring Ref Invariant ${width}/${cornerRise}/${riseSpan ?? "default"}`,
+            bounds: { width: 20, height: 16, length: 20 },
+            palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+            components: [
+              {
+                id: "eave",
+                type: "RectRing",
+                placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width, height: 4, length: width } },
+                options: {
+                  bandWidth: 1,
+                  height: 1,
+                  ...(cornerRise > 0 ? { cornerRise, ...(riseSpan ? { riseSpan } : {}) } : {}),
+                },
+                materials: { main: "roof" },
+              },
+              {
+                id: "cap",
+                type: "Platform",
+                inputs: [{ ref: "eave" }],
+                placement: { anchor: { x: 7, y: 11, z: 7 }, size: { width: 4, height: 1, length: 4 } },
+                materials: { main: "wall" },
+              },
+            ],
+          };
+
+          const craftDag = expandComponentPlan(plan);
+          const emittedIds = new Set(craftDag.nodes.map((node) => node.id));
+          for (const node of craftDag.nodes) {
+            for (const input of node.inputs ?? []) {
+              expect(emittedIds.has(input.ref)).toBe(true);
+            }
+          }
+        }
+      }
+    }
+  });
+
   it("rejects RectRing heights exceeding the placement and keeps flat rings compatible", () => {
     const basePlan = (options?: { bandWidth?: number; height?: number }): ComponentPlanDocument => ({
       version: "0.1",

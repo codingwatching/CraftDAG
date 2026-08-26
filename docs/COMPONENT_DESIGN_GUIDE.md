@@ -264,7 +264,7 @@ If an existing component plus clearer docs solves the problem, do not add a new 
 - `SteppedTier`: horizontal stepped tiers
 - `VerticalSetbackVolume`: vertical setback segments
 - `SteppedDome`: bounded stepped dome approximation
-- `RectRing`: rectangular ring band (eaves, cornices, parapets) around an open interior
+- `RectRing`: rectangular ring band (eaves, cornices, parapets) around an open interior, with optional stepped `cornerRise` toward corners for curved-eave/corner-uplift silhouettes
 - `GableRoof`: pitched roof volume
 - `FlatRoof`: flat cover/cap/canopy
 

@@ -120,7 +120,7 @@ Use `SteppedDome` for bounded Minecraft-style dome roofs and caps: Taj-style dom
 
 Use `RailingRun` for bounded posts and rails along decks, bridges, walls, and balconies. Prefer it over manually listing many posts. Use `postSpacing` for rhythm and `includeMidRail` for extra detail.
 
-Use `RectRing` for rectangular eave bands, cornices, parapets, plinth bands, and trim frames with an open interior. Set `options.bandWidth` for band thickness; keep at least a one-block open hole. Use `Platform` for full slabs and `CircleRing` for circular rings. Do not invent pagoda-eave or landmark-specific ring types.
+Use `RectRing` for rectangular eave bands, cornices, parapets, plinth bands, and trim frames with an open interior. Set `options.bandWidth` for band thickness; keep at least a one-block open hole. Use `Platform` for full slabs and `CircleRing` for circular rings. For pagoda/temple eaves, set `options.cornerRise` (1-3) with `options.riseSpan` (defaults to `cornerRise`) so the band steps upward toward each corner, approximating curved eave edges and corner uplift; size the ring so its inner hole matches the wall cross-section at that height, and give the placement enough height for base + rise. Do not invent pagoda-eave or landmark-specific ring types. Components that declare `inputs` on a cornerRise ring are automatically attached to every emitted segment, so no per-segment refs are needed.
 
 Use `ArcadeRun` for repeated stepped arch-like facade rhythms: colosseum bays, gothic arcades, palace cloisters, bridge arches, and monumental walls. Do not try to describe exact curves; use Minecraft-like blocky arches.
 
@@ -455,7 +455,7 @@ Agents should use structured diagnostics when available. Prefer `diagnosticsFrom
 
 For support warnings after successful compilation, use `analyzeComponentPlanSupport(plan)`. For preview/export tools that already have compiled voxels, use `analyzeVoxelSupport(voxelPlan)`.
 
-Support diagnostics are warnings, not validation failures. Repair unexpected `DISCONNECTED_COMPONENT` or `FLOATING_SOURCE_NODE` warnings by adding foundations, posts, brackets, shelves connected to inputs, or by moving the component onto a supporting surface. Treat `NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED` as a review signal for bridges, roofs, rails, and spans. Treat `LARGE_CANTILEVER` as a stronger span warning: add nearby posts, arches, cables, brackets, or explicit structural intent.
+Support diagnostics are warnings, not validation failures. Repair unexpected `DISCONNECTED_COMPONENT` or `FLOATING_SOURCE_NODE` warnings by adding foundations, posts, brackets, shelves connected to inputs, or by moving the component onto a supporting surface. Treat `NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED` as a review signal for bridges, roofs, rails, and spans. Treat `LARGE_CANTILEVER` as a stronger span warning: add nearby posts, arches, cables, brackets, or explicit structural intent. Treat `MINIMAL_ATTACHMENT` as a roof-frame review signal: a component you connected with `inputs` rests on very few shared faces; widen the bearing surface or add brackets instead of silencing it with `decorative`.
 
 Use `sourceSummaries` to identify the noisiest source nodes before editing. Prefer repairing the largest unexpected source groups first instead of making broad random changes.
 

@@ -348,6 +348,10 @@ export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlac
 export interface RectRingOptions {
   bandWidth?: number;
   height?: number;
+  /** Extra stepped height gained toward each corner; 0 keeps the flat band. */
+  cornerRise?: number;
+  /** Horizontal reach of the stepped rise from each corner; defaults to cornerRise. */
+  riseSpan?: number;
 }
 export type RectRingComponent = BaseComponentNode<"RectRing", AnchoredComponentPlacement, RectRingOptions>;
 export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;

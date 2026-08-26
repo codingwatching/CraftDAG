@@ -68,6 +68,7 @@ Observed support diagnostics on the current samples:
 | `temple-palace-dome-study` | pass | pass | 58 | 828 | 0 | Assembly authoring works; dome diagnostics remain noisy |
 | `xi-an-bell-tower-study` | pass | pass | 20 | 108 | 728 | Good visual landmark probe; broad eaves create intentional span/cantilever review points |
 | `giant-wild-goose-pagoda-study` | pass | pass | 20 | 0 | 24 | Walkable pagoda is structurally connected; repeated levels are verbose and need authoring support |
+| `pagoda-eave-flare-study` | pass | pass | 20 | 0 | 0 | Multi-level pagoda with `RectRing` cornerRise eaves on default strict policy; overhang review warnings are expected and no decorative suppression is needed |
 | `ship-bow-shape` | pass | pass | 38 | 1996 | 0 | Ship bow taper is useful visually but support diagnostics need clearer intent |
 | `arcade-bracket-study` | pass | pass | 60 | 1328 | 0 | Arch/bracket sample exposes span semantics and diagnostic noise |
 

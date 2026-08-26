@@ -369,6 +369,8 @@ const RectRingComponentSchema = z.object({
   options: z.object({
     bandWidth: PositiveIntSchema.optional(),
     height: PositiveIntSchema.optional(),
+    cornerRise: NonNegativeIntSchema.optional(),
+    riseSpan: PositiveIntSchema.optional(),
   }).strict().optional(),
 }).strict();
 
@@ -1805,6 +1807,7 @@ function rectRingPlacements(component: Extract<ComponentNode, { type: "RectRing"
   const height = component.options?.height ?? 1;
   const maxBand = Math.floor((Math.min(size.width, size.length) - 1) / 2);
   const band = Math.max(1, Math.min(component.options?.bandWidth ?? 1, maxBand));
+  const cornerRise = component.options?.cornerRise ?? 0;
 
   if (band * 2 >= size.width || band * 2 >= size.length) {
     return [{
@@ -1814,28 +1817,81 @@ function rectRingPlacements(component: Extract<ComponentNode, { type: "RectRing"
     }];
   }
 
-  return [
-    {
-      part: "ring_front",
-      anchor,
-      size: { width: size.width, height, length: band },
-    },
-    {
-      part: "ring_back",
-      anchor: { x: anchor.x, y: anchor.y, z: anchor.z + size.length - band },
-      size: { width: size.width, height, length: band },
-    },
-    {
-      part: "ring_left",
-      anchor: { x: anchor.x, y: anchor.y, z: anchor.z + band },
-      size: { width: band, height, length: size.length - band * 2 },
-    },
-    {
-      part: "ring_right",
-      anchor: { x: anchor.x + size.width - band, y: anchor.y, z: anchor.z + band },
-      size: { width: band, height, length: size.length - band * 2 },
-    },
-  ];
+  if (cornerRise <= 0) {
+    return [
+      {
+        part: "ring_front",
+        anchor,
+        size: { width: size.width, height, length: band },
+      },
+      {
+        part: "ring_back",
+        anchor: { x: anchor.x, y: anchor.y, z: anchor.z + size.length - band },
+        size: { width: size.width, height, length: band },
+      },
+      {
+        part: "ring_left",
+        anchor: { x: anchor.x, y: anchor.y, z: anchor.z + band },
+        size: { width: band, height, length: size.length - band * 2 },
+      },
+      {
+        part: "ring_right",
+        anchor: { x: anchor.x + size.width - band, y: anchor.y, z: anchor.z + band },
+        size: { width: band, height, length: size.length - band * 2 },
+      },
+    ];
+  }
+
+  const riseSpan = Math.max(1, component.options?.riseSpan ?? cornerRise);
+  const frontBackSegments = cornerRiseRunSegments(size.width, cornerRise, riseSpan);
+  const sideSegments = cornerRiseRunSegments(size.length - band * 2, cornerRise, riseSpan);
+  const placements: Array<{ part: string; anchor: { x: number; y: number; z: number }; size: ComponentSize }> = [];
+
+  for (const [side, offsetZ] of [["front", anchor.z], ["back", anchor.z + size.length - band]] as const) {
+    frontBackSegments.forEach((segmentPlacement, index) => {
+      placements.push({
+        part: `ring_${side}_seg${index}`,
+        anchor: { x: anchor.x + segmentPlacement.start, y: anchor.y, z: offsetZ },
+        size: { width: segmentPlacement.length, height: height + segmentPlacement.rise, length: band },
+      });
+    });
+  }
+
+  for (const [side, offsetX] of [["left", anchor.x], ["right", anchor.x + size.width - band]] as const) {
+    sideSegments.forEach((segmentPlacement, index) => {
+      placements.push({
+        part: `ring_${side}_seg${index}`,
+        anchor: { x: offsetX, y: anchor.y, z: anchor.z + band + segmentPlacement.start },
+        size: { width: band, height: height + segmentPlacement.rise, length: segmentPlacement.length },
+      });
+    });
+  }
+
+  return placements;
+}
+
+function cornerRiseRunSegments(
+  runLength: number,
+  cornerRise: number,
+  riseSpan: number
+): Array<{ start: number; length: number; rise: number }> {
+  const stepSize = Math.max(1, Math.ceil(riseSpan / cornerRise));
+  const segments: Array<{ start: number; length: number; rise: number }> = [];
+
+  for (let position = 0; position < runLength; position++) {
+    const distanceFromEnd = Math.min(position, runLength - 1 - position);
+    const zone = Math.floor(distanceFromEnd / stepSize);
+    const rise = Math.max(0, cornerRise - zone);
+    const last = segments[segments.length - 1];
+
+    if (last && last.rise === rise) {
+      last.length += 1;
+    } else {
+      segments.push({ start: position, length: 1, rise });
+    }
+  }
+
+  return segments;
 }
 
 function expandRailingRun(
@@ -2515,6 +2571,16 @@ function validateShapeComponent(component: ComponentNode): void {
         componentId: component.id,
         message: `RectRing "${component.id}" bandWidth leaves no open interior.`,
         repairHint: "Reduce options.bandWidth or increase placement.size width/length.",
+      });
+    }
+
+    const cornerRise = component.options?.cornerRise ?? 0;
+    if (cornerRise > 0 && (component.options?.height ?? 1) + cornerRise > height) {
+      throw componentValidationError({
+        code: "INVALID_RECT_RING_RISE",
+        componentId: component.id,
+        message: `RectRing "${component.id}" cornerRise exceeds the placement height.`,
+        repairHint: "Increase placement.size.height to at least options.height + options.cornerRise, or reduce options.cornerRise.",
       });
     }
 
@@ -3919,13 +3985,22 @@ function expandInputs(component: ComponentNode, componentMap: Map<string, Compon
     refs.add(component.placement.source);
   }
 
-  return [...refs].map((ref) => ({
-    ref: nodeId(ref, outputPart(componentMap.get(ref)!)),
-  }));
+  return [...refs].flatMap((ref) => componentInputRefs(ref, componentMap.get(ref)!));
 }
 
 function nodeId(componentId: string, partName: string): string {
   return `${componentId}__${partName}`;
+}
+
+/**
+ * Graph bearing contract: consumers of a multi-segment source depend on every
+ * emitted part, not one canonical segment. Do not collapse to single-ref.
+ */
+function componentInputRefs(ref: string, source: ComponentNode): { ref: string }[] {
+  if (source.type === "RectRing" && (source.options?.cornerRise ?? 0) > 0) {
+    return rectRingPlacements(source).map((placement) => ({ ref: nodeId(ref, placement.part) }));
+  }
+  return [{ ref: nodeId(ref, outputPart(source)) }];
 }
 
 function outputPart(component: ComponentNode): string {
@@ -3987,7 +4062,7 @@ function outputPart(component: ComponentNode): string {
     case "CircleRing":
       return "ring_0";
     case "RectRing":
-      return "ring_front";
+      return (component.options?.cornerRise ?? 0) > 0 ? "ring_front_seg0" : "ring_front";
     case "DiagonalBeam":
       return "beam_0_0_0_0";
     case "RadialRepeat":

@@ -1,0 +1,149 @@
+{
+  "version": "0.1",
+  "name": "Pagoda Eave Flare Study",
+  "grid": {
+    "unitBlocks": 1
+  },
+  "policy": {
+    "sizeTier": "large"
+  },
+  "bounds": {
+    "width": 40,
+    "height": 44,
+    "length": 40
+  },
+  "palette": {
+    "foundation": "minecraft:stone_bricks",
+    "wall": "minecraft:sandstone",
+    "floor": "minecraft:cut_sandstone",
+    "roof": "minecraft:cyan_terracotta",
+    "trim": "minecraft:gold_block"
+  },
+  "components": [
+    {
+      "id": "plinth",
+      "type": "Foundation",
+      "role": "temple_plinth",
+      "placement": {
+        "anchor": { "x": 4, "y": 0, "z": 4 },
+        "size": { "width": 32, "height": 1, "length": 32 }
+      }
+    },
+    {
+      "id": "podium",
+      "type": "SteppedTier",
+      "role": "tiered_temple_podium",
+      "inputs": [{ "ref": "plinth" }],
+      "placement": {
+        "anchor": { "x": 8, "y": 1, "z": 8 },
+        "size": { "width": 24, "height": 4, "length": 24 }
+      },
+      "options": {
+        "axis": "both",
+        "levels": 2,
+        "stepHeight": 2,
+        "insetPerLevel": 1
+      }
+    },
+    {
+      "id": "pagoda_body",
+      "type": "FloorStack",
+      "role": "multi_level_pagoda_levels",
+      "inputs": [{ "ref": "podium" }],
+      "placement": {
+        "anchor": { "x": 10, "y": 5, "z": 10 },
+        "size": { "width": 20, "height": 30, "length": 20 }
+      },
+      "options": {
+        "levels": 5,
+        "levelHeight": 6,
+        "setbackPerLevel": 1,
+        "stairStyle": "ladder",
+        "includeDoorways": true,
+        "includeWindows": true
+      }
+    },
+    {
+      "id": "eave_1",
+      "type": "RectRing",
+      "role": "flared_eave_level_1",
+      "inputs": [{ "ref": "pagoda_body" }],
+      "placement": {
+        "anchor": { "x": 8, "y": 10, "z": 8 },
+        "size": { "width": 24, "height": 4, "length": 24 }
+      },
+      "options": {
+        "bandWidth": 2,
+        "height": 1,
+        "cornerRise": 2,
+        "riseSpan": 3
+      }
+    },
+    {
+      "id": "eave_2",
+      "type": "RectRing",
+      "role": "flared_eave_level_2",
+      "inputs": [{ "ref": "pagoda_body" }],
+      "placement": {
+        "anchor": { "x": 9, "y": 16, "z": 9 },
+        "size": { "width": 22, "height": 4, "length": 22 }
+      },
+      "options": {
+        "bandWidth": 2,
+        "height": 1,
+        "cornerRise": 2,
+        "riseSpan": 3
+      }
+    },
+    {
+      "id": "eave_3",
+      "type": "RectRing",
+      "role": "flared_eave_level_3",
+      "inputs": [{ "ref": "pagoda_body" }],
+      "placement": {
+        "anchor": { "x": 10, "y": 22, "z": 10 },
+        "size": { "width": 20, "height": 4, "length": 20 }
+      },
+      "options": {
+        "bandWidth": 2,
+        "height": 1,
+        "cornerRise": 3,
+        "riseSpan": 3
+      }
+    },
+    {
+      "id": "roof_cap",
+      "type": "SteppedDome",
+      "role": "pagoda_roof_cap",
+      "inputs": [{ "ref": "pagoda_body" }],
+      "placement": {
+        "anchor": { "x": 13, "y": 35, "z": 13 },
+        "size": { "width": 14, "height": 6, "length": 14 }
+      },
+      "materials": {
+        "main": "roof"
+      },
+      "options": {
+        "levels": 3,
+        "insetPerLevel": 2,
+        "hollow": false
+      }
+    },
+    {
+      "id": "roof_finial",
+      "type": "SupportPost",
+      "role": "pagoda_roof_finial",
+      "inputs": [{ "ref": "roof_cap" }],
+      "placement": {
+        "anchor": { "x": 19, "y": 41, "z": 19 },
+        "size": { "width": 2, "height": 3, "length": 2 }
+      },
+      "materials": {
+        "main": "trim"
+      },
+      "structural": {
+        "supportPolicy": "decorative"
+      }
+    }
+  ]
+}
