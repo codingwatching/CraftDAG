@@ -354,6 +354,21 @@ const StairRunComponentSchema = z.object({
     direction: z.enum(["positive", "negative"]).optional(),
     style: z.literal("solid").optional(),
     includeSideRails: z.boolean().optional(),
+    sideRailStyle: z.enum(["solid", "handrail"]).optional(),
+  }).strict().optional(),
+}).strict();
+
+const RectRingComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("RectRing"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: AnchoredPlacementSchema,
+  materials: MaterialsSchema,
+  structural: StructuralIntentSchema.optional(),
+  options: z.object({
+    bandWidth: PositiveIntSchema.optional(),
+    height: PositiveIntSchema.optional(),
   }).strict().optional(),
 }).strict();
 
@@ -560,6 +575,7 @@ const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   LightComponentSchema,
   CircleRingComponentSchema,
+  RectRingComponentSchema,
   DiagonalBeamComponentSchema,
   RadialRepeatComponentSchema,
   DoorComponentSchema,
@@ -594,6 +610,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   LightComponentSchema,
   CircleRingComponentSchema,
+  RectRingComponentSchema,
   DiagonalBeamComponentSchema,
   RadialRepeatComponentSchema,
   DoorComponentSchema,
@@ -640,7 +657,7 @@ const ComponentPlanSchema = z.object({
 
 type AnchoredComponent = Extract<ComponentNode, { placement: { anchor: unknown; size: unknown } }>;
 type RepeatableComponent = Extract<ComponentNode, {
-  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "Light" | "CircleRing" | "DiagonalBeam" | "SupportPost" | "Instance";
+  type: "Foundation" | "Platform" | "Beam" | "RoomShell" | "Compartment" | "Corridor" | "TaperedVolume" | "SteppedTier" | "VerticalSetbackVolume" | "FloorStack" | "SteppedDome" | "RailingRun" | "ArcadeRun" | "SupportBracket" | "TreeCanopy" | "OrganicPatch" | "PathRun" | "RockCluster" | "StairRun" | "Light" | "CircleRing" | "RectRing" | "DiagonalBeam" | "SupportPost" | "Instance";
 }>;
 type ComponentScope = "ComponentPlan" | `Assembly "${string}"` | `Section "${string}"`;
 
@@ -1130,6 +1147,8 @@ function expandComponentToNodes(
       }];
     case "CircleRing":
       return expandCircleRing(component, unit, expandInputs(component, componentMap));
+    case "RectRing":
+      return expandRectRing(component, componentMap, unit);
     case "DiagonalBeam":
       return expandDiagonalBeam(component, unit, expandInputs(component, componentMap));
     case "RadialRepeat":
@@ -1757,6 +1776,66 @@ function expandSteppedDome(
       block: material(component, "main", "roof"),
     },
   }));
+}
+
+function expandRectRing(
+  component: Extract<ComponentNode, { type: "RectRing" }>,
+  componentMap: Map<string, ComponentNode>,
+  unit: 1 | 2,
+  inputOverride?: { ref: string }[]
+): CraftDagNode[] {
+  const inputs = inputOverride ?? expandInputs(component, componentMap);
+  return rectRingPlacements(component).map((placement) => ({
+    id: nodeId(component.id, placement.part),
+    type: "SolidBox",
+    inputs,
+    params: {
+      ...scaledBox(placement, unit),
+      block: material(component, "main", "roof"),
+    },
+  }));
+}
+
+function rectRingPlacements(component: Extract<ComponentNode, { type: "RectRing" }>): Array<{
+  part: string;
+  anchor: { x: number; y: number; z: number };
+  size: ComponentSize;
+}> {
+  const { anchor, size } = component.placement;
+  const height = component.options?.height ?? 1;
+  const maxBand = Math.floor((Math.min(size.width, size.length) - 1) / 2);
+  const band = Math.max(1, Math.min(component.options?.bandWidth ?? 1, maxBand));
+
+  if (band * 2 >= size.width || band * 2 >= size.length) {
+    return [{
+      part: "ring_solid",
+      anchor,
+      size: { width: size.width, height, length: size.length },
+    }];
+  }
+
+  return [
+    {
+      part: "ring_front",
+      anchor,
+      size: { width: size.width, height, length: band },
+    },
+    {
+      part: "ring_back",
+      anchor: { x: anchor.x, y: anchor.y, z: anchor.z + size.length - band },
+      size: { width: size.width, height, length: band },
+    },
+    {
+      part: "ring_left",
+      anchor: { x: anchor.x, y: anchor.y, z: anchor.z + band },
+      size: { width: band, height, length: size.length - band * 2 },
+    },
+    {
+      part: "ring_right",
+      anchor: { x: anchor.x + size.width - band, y: anchor.y, z: anchor.z + band },
+      size: { width: band, height, length: size.length - band * 2 },
+    },
+  ];
 }
 
 function expandRailingRun(
@@ -2395,6 +2474,7 @@ function validateShapeComponent(component: ComponentNode): void {
     const runLength = axis === "x" ? component.placement.size.width : component.placement.size.length;
     const crossWidth = axis === "x" ? component.placement.size.length : component.placement.size.width;
     const includeSideRails = component.options?.includeSideRails ?? false;
+    const sideRailStyle = component.options?.sideRailStyle ?? "solid";
 
     if (runLength < component.placement.size.height) {
       throw componentValidationError({
@@ -2405,12 +2485,45 @@ function validateShapeComponent(component: ComponentNode): void {
       });
     }
 
-    if (includeSideRails && crossWidth < 3) {
+    if (includeSideRails && crossWidth < 2) {
       throw componentValidationError({
         code: "INVALID_STAIR_RUN_RAIL_WIDTH",
         componentId: component.id,
         message: `StairRun "${component.id}" needs enough width for side rails.`,
-        repairHint: "Use perpendicular width/length >= 3 or disable includeSideRails.",
+        repairHint: "Use perpendicular width/length >= 2 or disable includeSideRails.",
+      });
+    }
+
+    if (includeSideRails && sideRailStyle === "solid" && crossWidth < 3) {
+      throw componentValidationError({
+        code: "INVALID_STAIR_RUN_RAIL_WIDTH",
+        componentId: component.id,
+        message: `StairRun "${component.id}" needs enough width for solid side rails.`,
+        repairHint: "Use perpendicular width/length >= 3, set options.sideRailStyle to \"handrail\", or disable includeSideRails.",
+      });
+    }
+  }
+
+  if (component.type === "RectRing") {
+    const { width, length, height } = component.placement.size;
+    const band = component.options?.bandWidth ?? 1;
+    const ringHeight = component.options?.height;
+
+    if (width - band * 2 < 1 || length - band * 2 < 1) {
+      throw componentValidationError({
+        code: "INVALID_RECT_RING_BAND",
+        componentId: component.id,
+        message: `RectRing "${component.id}" bandWidth leaves no open interior.`,
+        repairHint: "Reduce options.bandWidth or increase placement.size width/length.",
+      });
+    }
+
+    if (ringHeight !== undefined && ringHeight > height) {
+      throw componentValidationError({
+        code: "INVALID_RECT_RING_HEIGHT",
+        componentId: component.id,
+        message: `RectRing "${component.id}" options.height ${ringHeight} exceeds placement.size.height ${height}.`,
+        repairHint: "Reduce options.height or increase placement.size.height so ring walls stay inside the declared footprint.",
       });
     }
   }
@@ -2836,6 +2949,9 @@ function estimateComponentBlocks(
       const area = fill === "solid" ? Math.PI * r * r : Math.PI * (r * r - Math.max(0, r - t) * Math.max(0, r - t));
       return Math.ceil(area) * h;
     }
+    case "RectRing":
+      return rectRingPlacements(component)
+        .reduce((total, placement) => total + componentVolume(placement.size) * unit * unit * unit, 0);
     case "DiagonalBeam": {
       const { from, to: end } = component.placement;
       const dx = end.x - from.x, dy = end.y - from.y, dz = end.z - from.z;
@@ -3411,6 +3527,7 @@ function stairRunPlacements(component: Extract<ComponentNode, { type: "StairRun"
   const axis = stairRunAxis(component);
   const direction = component.options?.direction ?? "positive";
   const includeSideRails = component.options?.includeSideRails ?? false;
+  const sideRailStyle = component.options?.sideRailStyle ?? "solid";
   const runLength = axis === "x" ? size.width : size.length;
   const crossWidth = axis === "x" ? size.length : size.width;
   const placements: Array<{ part: string; anchor: { x: number; y: number; z: number }; size: ComponentSize; materialRole: string; materialFallback: string }> = [];
@@ -3431,7 +3548,9 @@ function stairRunPlacements(component: Extract<ComponentNode, { type: "StairRun"
     });
   }
 
-  if (includeSideRails) {
+  if (includeSideRails && sideRailStyle === "handrail") {
+    appendStairHandrailPlacements(component, placements);
+  } else if (includeSideRails) {
     placements.push({
       part: "left_rail",
       anchor: stairRailAnchor(anchor, axis, 0),
@@ -3449,6 +3568,51 @@ function stairRunPlacements(component: Extract<ComponentNode, { type: "StairRun"
   }
 
   return placements;
+}
+
+function appendStairHandrailPlacements(
+  component: Extract<ComponentNode, { type: "StairRun" }>,
+  placements: Array<{ part: string; anchor: { x: number; y: number; z: number }; size: ComponentSize; materialRole: string; materialFallback: string }>
+): void {
+  const { anchor, size } = component.placement;
+  const axis = stairRunAxis(component);
+  const direction = component.options?.direction ?? "positive";
+  const runLength = axis === "x" ? size.width : size.length;
+  const crossWidth = axis === "x" ? size.length : size.width;
+
+  if (crossWidth < 2) {
+    return;
+  }
+
+  for (let step = 0; step < size.height; step += 1) {
+    const stepStart = Math.floor((step * runLength) / size.height);
+    const stepEnd = Math.floor(((step + 1) * runLength) / size.height);
+    const treadDepth = stepEnd - stepStart;
+    const start = direction === "positive"
+      ? stepStart
+      : runLength - stepEnd;
+    // Deliberate clamp: handrails must stay within placement.size.height,
+    // so the top rail level merges with the top tread level.
+    const railYOffset = Math.min(step + 1, size.height - 1);
+
+    placements.push({
+      part: `left_handrail_step_${step}`,
+      anchor: stairPlacementAnchor(anchor, axis, start, 0, railYOffset),
+      size: stairPlacementSize(axis, treadDepth, 1, 1),
+      materialRole: "rail",
+      materialFallback: "trim",
+    });
+
+    if (crossWidth > 1) {
+      placements.push({
+        part: `right_handrail_step_${step}`,
+        anchor: stairPlacementAnchor(anchor, axis, start, crossWidth - 1, railYOffset),
+        size: stairPlacementSize(axis, treadDepth, 1, 1),
+        materialRole: "rail",
+        materialFallback: "trim",
+      });
+    }
+  }
 }
 
 function stairRunAxis(component: Extract<ComponentNode, { type: "StairRun" }>): "x" | "z" {
@@ -3727,6 +3891,8 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
     case "DiagonalBeam":
     case "RadialRepeat":
       return [{ role: "main", value: "wall" }];
+    case "RectRing":
+      return [{ role: "main", value: "roof" }];
     default: {
       const _exhaustiveCheck: never = component;
       throw new ValidationError(`Unhandled component type: ${(_exhaustiveCheck as any).type}`);
@@ -3820,6 +3986,8 @@ function outputPart(component: ComponentNode): string {
       return "repeat";
     case "CircleRing":
       return "ring_0";
+    case "RectRing":
+      return "ring_front";
     case "DiagonalBeam":
       return "beam_0_0_0_0";
     case "RadialRepeat":
@@ -4061,6 +4229,8 @@ function expandRepeatableComponent(
     case "CircleRing":
     case "DiagonalBeam":
       throw new ValidationError("CircleRing/DiagonalBeam should be expanded via expandRepeat, not expandRepeatableComponent");
+    case "RectRing":
+      return expandRectRing(repeated, componentMap, unit, inputs);
     case "Instance":
       throw new ValidationError("Instance should be expanded via expandRepeat, not expandRepeatableComponent");
     default: {
@@ -4577,6 +4747,7 @@ function isRepeatableComponent(component: ComponentNode): component is Repeatabl
     component.type === "StairRun" ||
     component.type === "Light" ||
     component.type === "CircleRing" ||
+    component.type === "RectRing" ||
     component.type === "SupportPost" ||
     component.type === "Instance"
   );

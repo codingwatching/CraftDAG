@@ -340,10 +340,16 @@ export interface StairRunOptions {
   direction?: "positive" | "negative";
   style?: "solid";
   includeSideRails?: boolean;
+  sideRailStyle?: "solid" | "handrail";
 }
 export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentPlacement, StairRunOptions>;
 export type LightComponent = BaseComponentNode<"Light", AnchoredComponentPlacement>;
 export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
+export interface RectRingOptions {
+  bandWidth?: number;
+  height?: number;
+}
+export type RectRingComponent = BaseComponentNode<"RectRing", AnchoredComponentPlacement, RectRingOptions>;
 export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;
 export type RadialRepeatComponent = BaseComponentNode<"RadialRepeat", RadialRepeatPlacement>;
 export type AssetInstanceComponent = BaseComponentNode<"AssetInstance", AssetInstancePlacement>;
@@ -380,6 +386,7 @@ export type AssemblyComponentNode =
   | StairRunComponent
   | LightComponent
   | CircleRingComponent
+  | RectRingComponent
   | DiagonalBeamComponent
   | RadialRepeatComponent
   | DoorComponent

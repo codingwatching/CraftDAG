@@ -194,6 +194,7 @@ Start with a small component vocabulary:
 - `SteppedTier`
 - `VerticalSetbackVolume`
 - `SteppedDome`
+- `RectRing`
 - `RailingRun`
 - `ArcadeRun`
 - `SupportBracket`
@@ -226,7 +227,7 @@ Use `Compartment` for bounded interior rooms, holds, machinery spaces, cabins, c
 
 Use `Corridor` for open-ended interior circulation runs. It expands to a floor, two side walls, and an optional ceiling. Corridors default to the longer horizontal axis, or agents can set `options.axis` to `"x"` or `"z"`.
 
-Use `StairRun` for blocky vertical circulation in multi-level builds, such as survival bases, castle towers, ship decks, palaces, dungeons, and subway entrances. It expands to stepped `SolidBox` treads and optional side rails. Use `Platform` for flat decks, `Corridor` for horizontal circulation, and `SupportPost` for vertical supports; use `StairRun` when the authoring intent is walkable vertical movement between levels.
+Use `StairRun` for blocky vertical circulation in multi-level builds, such as survival bases, castle towers, ship decks, palaces, dungeons, and subway entrances. It expands to stepped `SolidBox` treads and optional side rails. Use `Platform` for flat decks, `Corridor` for horizontal circulation, and `SupportPost` for vertical supports; use `StairRun` when the authoring intent is walkable vertical movement between levels. With `includeSideRails`, `options.sideRailStyle` selects the rail profile: `"solid"` (default) emits full-height one-block-thick side wall strips, while `"handrail"` emits thin one-block-high rails that follow the stair slope one block above each tread at both side edges, keeping the staircase visually open. Solid rails require perpendicular width >= 3; handrails require width >= 2.
 
 Use `FloorStack` for multi-level towers, pagodas, stair towers, bell towers, and other vertically stacked room-like volumes. It expands into stacked `RoomShell` tiers with circulation between each level. Set `options.levels` for the number of stacked floors and `options.levelHeight` for each floor's height. Use `materials.circulation` to set the ladder or stair block material (defaults to the palette `circulation` key). Set `options.stairStyle` to `"stair"` for stair runs or `"ladder"` for compact ladder columns that leave more floor space. When `stairStyle: "stair"` is set but the level is too narrow for stairs (`levelHeight > nextLevelWidth - 2`), the engine silently falls back to `"ladder"`. Use `options.stairSide` (`"front"` | `"back"` | `"left"` | `"right"`) to place the circulation element on a specific wall face. Set `options.includeDoorways` and `options.includeWindows` for automatic per-level openings.
 
@@ -237,6 +238,8 @@ Use `SteppedTier` for large horizontal tiering, such as pyramids, amphitheater s
 Use `VerticalSetbackVolume` for tall landmark massing with discrete setbacks, such as Burj-style towers, pagodas, tiered spires, and skyscraper podiums. It expands into stacked vertical segments. Prefer it over many manual `Platform` or `TaperedVolume` components when the shape is primarily height-driven.
 
 Use `SteppedDome` for bounded Minecraft-style dome approximations, such as Taj-style central domes, temple or mosque roofs, observatories, rotundas, and fantasy tower caps. It expands into stacked shrinking tiers inside one anchored box. Use it when the authoring intent is a dome-like roof or cap; use `SteppedTier` for horizontal terraces and `VerticalSetbackVolume` for tall setback towers. Do not add landmark-specific dome component types.
+
+Use `RectRing` for rectangular ring bands around an open interior: eave bands on tiered towers and pagoda-style roofs, cornices, parapets, plinth bands, balcony fascias, and trim frames around courtyards or roof plates. It is the rectangular counterpart to `CircleRing` and expands into at most four axis-aligned band boxes (`ring_front`, `ring_back`, `ring_left`, `ring_right`) inside one anchored bounding box. Use `options.bandWidth` for the inward band thickness and `options.height` for the band height. The band must leave at least a one-block open interior; use `Platform` instead when the surface should be a full slab. Corner flares and curved profiles are intentionally out of scope; pair it with `SteppedDome` or `CircleRing` for curved caps.
 
 Use `RailingRun` for repeated posts plus horizontal rails along bridges, decks, walls, balconies, and platforms. It is a bounded run, not a fence/pathfinding simulator. Use `postSpacing`, `includeTopRail`, and `includeMidRail` for controlled detail.
 
@@ -309,7 +312,7 @@ Supported policies:
 Default policies:
 
 - `Foundation`: `must_connect_to_ground`
-- `Platform`, `Beam`, `RoomShell`, `Compartment`, `Corridor`, `StairRun`, `TaperedVolume`, `SteppedTier`, `VerticalSetbackVolume`, `SteppedDome`, `ArcadeRun`, `SupportBracket`, `TreeCanopy`, `OrganicPatch`, `PathRun`, `RockCluster`, `SupportPost`: `must_connect_to_input`
+- `Platform`, `Beam`, `RoomShell`, `Compartment`, `Corridor`, `StairRun`, `TaperedVolume`, `SteppedTier`, `VerticalSetbackVolume`, `SteppedDome`, `RectRing`, `ArcadeRun`, `SupportBracket`, `TreeCanopy`, `OrganicPatch`, `PathRun`, `RockCluster`, `SupportPost`: `must_connect_to_input`
 - `RailingRun`, `Light`, `Door`, `Window`, `Opening`, `Portal`: `decorative`
 - `Repeat`, `Instance`: `must_connect_to_input`
 
@@ -373,7 +376,7 @@ type RepeatPlacement = {
 }
 ```
 
-`Repeat` duplicates the source component `count - 1` times, because the source component itself remains the first instance. In v0.1, only anchored components can be repeated: `Foundation`, `Platform`, `Beam`, `RoomShell`, `Compartment`, `Corridor`, `StairRun`, `TaperedVolume`, `SteppedTier`, `VerticalSetbackVolume`, `SteppedDome`, `RailingRun`, `ArcadeRun`, `SupportBracket`, `TreeCanopy`, `OrganicPatch`, `PathRun`, `RockCluster`, `Light`, and `SupportPost`.
+`Repeat` duplicates the source component `count - 1` times, because the source component itself remains the first instance. In v0.1, only anchored components can be repeated: `Foundation`, `Platform`, `Beam`, `RoomShell`, `Compartment`, `Corridor`, `StairRun`, `TaperedVolume`, `SteppedTier`, `VerticalSetbackVolume`, `SteppedDome`, `RectRing`, `RailingRun`, `ArcadeRun`, `SupportBracket`, `TreeCanopy`, `OrganicPatch`, `PathRun`, `RockCluster`, `Light`, and `SupportPost`.
 
 Repeated clone IDs are stable:
 

@@ -156,7 +156,7 @@ describe("support analysis", () => {
     expect(result.disconnectedBlocks).toBe(9);
     expect(result.diagnostics).toEqual([]);
     expect(withAllowed.diagnostics).toContainEqual(expect.objectContaining({
-      code: "ALLOWED_NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      code: "ALLOWED_DISCONNECTED_COMPONENT",
       sourceNodeId: "floating_lantern__body__platform",
       supportPolicy: "decorative",
     }));
@@ -204,12 +204,372 @@ describe("support analysis", () => {
     const result = analyzeComponentPlanSupport(plan, { includeAllowed: true });
 
     expect(result.diagnostics).toContainEqual(expect.objectContaining({
-      code: "ALLOWED_NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      code: "ALLOWED_DISCONNECTED_COMPONENT",
       sourceNodeId: "floating_instance__body__platform",
       supportPolicy: "may_float",
       supportRoots: ["base"],
       maxCantilever: 3,
     }));
+  });
+
+  it("keeps truly floating nested sub-parts blocking even when a sibling input is connected", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Partial Subpart Disconnection",
+      bounds: { width: 12, height: 16, length: 12 },
+      palette: {
+        foundation: "minecraft:stone",
+        wall: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        roof: "minecraft:stone",
+        glass: "minecraft:glass",
+        door: "minecraft:oak_door",
+        trim: "minecraft:oak_log",
+      },
+      assemblies: [{
+        id: "tiered_module",
+        bounds: { width: 3, height: 8, length: 3 },
+        components: [
+          {
+            id: "slab",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 3 } },
+          },
+          {
+            id: "spire",
+            type: "SupportPost",
+            inputs: [{ ref: "slab" }],
+            placement: { anchor: { x: 1, y: 5, z: 1 }, size: { width: 1, height: 2, length: 1 } },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "tiered_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "tower__spire__post",
+    }));
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "tower__slab__platform")).toEqual([]);
+  });
+
+  it("keeps a floating Repeat clone blocking when a sibling clone is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Clone Isolation",
+      bounds: { width: 12, height: 12, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      components: [
+        {
+          id: "pier_a",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 8 } },
+        },
+        {
+          id: "pier_b",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 8 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "ledge",
+          type: "Platform",
+          inputs: [{ ref: "pier_a" }],
+          placement: { anchor: { x: 0, y: 1, z: 6 }, size: { width: 2, height: 1, length: 1 } },
+        },
+        {
+          id: "ledge_row",
+          type: "Repeat",
+          inputs: [{ ref: "pier_b" }],
+          placement: { source: "ledge", axis: "z", step: 3, count: 3 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "ledge_row__ledge_1__platform")).toEqual([]);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ledge_row__ledge_2__platform",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ledge_row__ledge_2__platform",
+    }));
+  });
+
+  it("keeps floating nested children of a Repeat(Instance) clone blocking when a sibling child is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Instance Clone Isolation",
+      bounds: { width: 12, height: 16, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        trim: "minecraft:oak_log",
+      },
+      assemblies: [{
+        id: "tiered_module",
+        bounds: { width: 3, height: 8, length: 3 },
+        components: [
+          {
+            id: "slab",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 3 } },
+          },
+          {
+            id: "spire",
+            type: "SupportPost",
+            inputs: [{ ref: "slab" }],
+            placement: { anchor: { x: 1, y: 5, z: 1 }, size: { width: 1, height: 2, length: 1 } },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "base_b",
+          type: "Foundation",
+          placement: { anchor: { x: 6, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "tiered_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+        {
+          id: "row",
+          type: "Repeat",
+          placement: { source: "tower", axis: "x", step: 6, count: 2 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "row__tower_1__slab__platform")).toBe(false);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "row__tower_1__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "row__tower_1__spire__post",
+    }));
+  });
+
+  it("keeps floating nested children of RadialRepeat(Instance) clones blocking when sibling children are grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "RadialRepeat Instance Clone Isolation",
+      bounds: { width: 12, height: 16, length: 16 },
+      palette: {
+        foundation: "minecraft:stone",
+        wall: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        trim: "minecraft:oak_log",
+      },
+      assemblies: [{
+        id: "tiered_module",
+        bounds: { width: 3, height: 8, length: 3 },
+        components: [
+          {
+            id: "slab",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 3 } },
+          },
+          {
+            id: "spire",
+            type: "SupportPost",
+            inputs: [{ ref: "slab" }],
+            placement: { anchor: { x: 1, y: 5, z: 1 }, size: { width: 1, height: 2, length: 1 } },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "base",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 4, height: 1, length: 4 } },
+        },
+        {
+          id: "pad_a",
+          type: "Foundation",
+          placement: { anchor: { x: 9, y: 0, z: 6 }, size: { width: 3, height: 1, length: 3 } },
+        },
+        {
+          id: "pad_b",
+          type: "Foundation",
+          placement: { anchor: { x: 3, y: 0, z: 6 }, size: { width: 3, height: 1, length: 3 } },
+        },
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "tiered_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+        {
+          id: "ring",
+          type: "RadialRepeat",
+          placement: { source: "tower", center: { x: 6, z: 6 }, radius: 3, count: 2 },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "ring__tower_0__slab__platform")).toBe(false);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId === "ring__tower_1__slab__platform")).toBe(false);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ring__tower_0__spire__post",
+    }));
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "ring__tower_1__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ring__tower_0__spire__post",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "ring__tower_1__spire__post",
+    }));
+  });
+
+  it("keeps floating nested children of an Instance(Repeat) assembly blocking when a sibling clone is grounded", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Instance Repeat Clone Isolation",
+      bounds: { width: 8, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      assemblies: [{
+        id: "pergola_module",
+        bounds: { width: 5, height: 2, length: 2 },
+        components: [
+          {
+            id: "ledge",
+            type: "Platform",
+            placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 1, height: 1, length: 1 } },
+          },
+          {
+            id: "row",
+            type: "Repeat",
+            inputs: [{ ref: "ledge" }],
+            placement: { source: "ledge", axis: "x", step: 2, count: 3 },
+          },
+        ],
+      }],
+      components: [
+        {
+          id: "pier_a",
+          type: "Foundation",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 3, height: 1, length: 1 } },
+        },
+        {
+          id: "inst",
+          type: "Instance",
+          placement: { assembly: "pergola_module", anchor: { x: 0, y: 1, z: 0 } },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.diagnostics.filter((diagnostic) => diagnostic.sourceNodeId === "inst__row__ledge_1__platform")).toEqual([]);
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "inst__row__ledge_2__platform",
+    }));
+    expect(result.diagnostics).not.toContainEqual(expect.objectContaining({
+      code: "NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED",
+      sourceNodeId: "inst__row__ledge_2__platform",
+    }));
+  });
+
+  it("carries Repeat may_float structural intent into nested children of Repeat(Instance) clones", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Repeat Instance Intent Inheritance",
+      bounds: { width: 8, height: 8, length: 8 },
+      palette: {
+        foundation: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+      },
+      assemblies: [{
+        id: "float_module",
+        bounds: { width: 2, height: 1, length: 2 },
+        components: [{
+          id: "slab",
+          type: "Platform",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 2, height: 1, length: 2 } },
+        }],
+      }],
+      components: [
+        {
+          id: "tower",
+          type: "Instance",
+          placement: { assembly: "float_module", anchor: { x: 0, y: 4, z: 0 } },
+        },
+        {
+          id: "row",
+          type: "Repeat",
+          placement: { source: "tower", axis: "x", step: 6, count: 2 },
+          structural: { supportPolicy: "may_float" },
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+    const withAllowed = analyzeComponentPlanSupport(plan, { includeAllowed: true });
+
+    expect(withAllowed.diagnostics).toContainEqual(expect.objectContaining({
+      code: "ALLOWED_DISCONNECTED_COMPONENT",
+      sourceNodeId: "row__tower_1__slab__platform",
+      supportPolicy: "may_float",
+    }));
+    expect(result.diagnostics.some((diagnostic) =>
+      diagnostic.sourceNodeId.startsWith("row__tower_1") &&
+      (diagnostic.code === "DISCONNECTED_COMPONENT" || diagnostic.code === "FLOATING_SOURCE_NODE")
+    )).toBe(false);
+    expect(result.sourceSummaries.find((summary) => summary.sourceNodeId === "row__tower_1__slab__platform")).toMatchObject({
+      supportPolicy: "may_float",
+    });
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "tower__slab__platform",
+    }));
+    expect(result.sourceSummaries.find((summary) => summary.sourceNodeId === "tower__slab__platform")).toMatchObject({
+      supportPolicy: "must_connect_to_input",
+    });
   });
 
   it("distinguishes connected side-supported spans from disconnected components", () => {
@@ -287,6 +647,181 @@ describe("support analysis", () => {
 
     expect(result.diagnostics.some((diagnostic) => diagnostic.sourceNodeId?.startsWith("rail__"))).toBe(false);
     expect(withAllowed.diagnostics.some((diagnostic) => diagnostic.code === "ALLOWED_NOT_VERTICALLY_SUPPORTED_BUT_CONNECTED")).toBe(true);
+  });
+
+  it("reports no floating diagnostics for a strict-policy rail on its declared input deck", () => {
+    const plan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 8, height: 1, length: 8 } },
+      },
+      {
+        id: "post_a",
+        type: "SupportPost",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 1, y: 1, z: 1 }, size: { width: 1, height: 4, length: 1 } },
+      },
+      {
+        id: "post_b",
+        type: "SupportPost",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 6, y: 1, z: 6 }, size: { width: 1, height: 4, length: 1 } },
+      },
+      {
+        id: "deck",
+        type: "Platform",
+        inputs: [{ ref: "post_a" }, { ref: "post_b" }],
+        placement: { anchor: { x: 0, y: 5, z: 0 }, size: { width: 8, height: 1, length: 8 } },
+      },
+      {
+        id: "rail",
+        type: "RailingRun",
+        inputs: [{ ref: "deck" }],
+        placement: { anchor: { x: 0, y: 6, z: 0 }, size: { width: 8, height: 3, length: 1 } },
+        options: { axis: "x" },
+        structural: { supportPolicy: "must_connect_to_input" },
+      },
+    ]);
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.disconnectedBlocks).toBe(0);
+    expect(result.diagnostics.some((diagnostic) =>
+      diagnostic.code === "FLOATING_SOURCE_NODE" || diagnostic.code === "DISCONNECTED_COMPONENT"
+    )).toBe(false);
+    expect(result.summary.qualityGate.status).toBe("review");
+  });
+
+  it("reports no floating diagnostics for a rail on an eave platform of a multi-level SteppedDome", () => {
+    const plan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 12, height: 1, length: 12 } },
+      },
+      {
+        id: "dome",
+        type: "SteppedDome",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 2, y: 1, z: 2 }, size: { width: 8, height: 6, length: 8 } },
+        options: { levels: 3, insetPerLevel: 1 },
+      },
+      {
+        id: "eave",
+        type: "Platform",
+        inputs: [{ ref: "dome" }],
+        placement: { anchor: { x: 0, y: 3, z: 0 }, size: { width: 12, height: 1, length: 12 } },
+      },
+      {
+        id: "erail",
+        type: "RailingRun",
+        inputs: [{ ref: "eave" }],
+        placement: { anchor: { x: 0, y: 4, z: 0 }, size: { width: 12, height: 3, length: 1 } },
+        options: { axis: "x" },
+        structural: { supportPolicy: "must_connect_to_input" },
+      },
+    ]);
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.disconnectedBlocks).toBe(0);
+    expect(result.diagnostics.some((diagnostic) =>
+      diagnostic.code === "FLOATING_SOURCE_NODE" || diagnostic.code === "DISCONNECTED_COMPONENT"
+    )).toBe(false);
+    for (const level of [0, 1, 2]) {
+      expect(result.sourceSummaries.find((summary) => summary.sourceNodeId === `dome__dome_${level}`)?.disconnectedBlocks ?? 0).toBe(0);
+    }
+  });
+
+  it("preserves true floating detection for a rail detached above its declared input", () => {
+    const plan = basePlan([
+      {
+        id: "base",
+        type: "Foundation",
+        placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 12, height: 1, length: 12 } },
+      },
+      {
+        id: "deck",
+        type: "Platform",
+        inputs: [{ ref: "base" }],
+        placement: { anchor: { x: 0, y: 1, z: 0 }, size: { width: 12, height: 1, length: 12 } },
+      },
+      {
+        id: "frail",
+        type: "RailingRun",
+        inputs: [{ ref: "deck" }],
+        placement: { anchor: { x: 0, y: 9, z: 0 }, size: { width: 12, height: 3, length: 1 } },
+        options: { axis: "x" },
+        structural: { supportPolicy: "must_connect_to_input" },
+      },
+    ]);
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "frail__top_rail",
+    }));
+    expect(result.summary.qualityGate.blockingReasons).toEqual(["DISCONNECTED_COMPONENT", "FLOATING_SOURCE_NODE"]);
+  });
+
+  it("keeps fully floating section-scoped platforms and rails as blocking diagnostics", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Sectioned Float Plan",
+      bounds: { width: 24, height: 24, length: 24 },
+      palette: {
+        foundation: "minecraft:stone",
+        wall: "minecraft:stone",
+        floor: "minecraft:oak_planks",
+        roof: "minecraft:stone",
+        glass: "minecraft:glass",
+        door: "minecraft:oak_door",
+        trim: "minecraft:oak_log",
+      },
+      sections: [
+        {
+          id: "tower_sec",
+          origin: { x: 0, y: 0, z: 0 },
+          bounds: { width: 24, height: 24, length: 24 },
+          components: [
+            {
+              id: "sbase",
+              type: "Foundation",
+              placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 8, height: 1, length: 8 } },
+            },
+            {
+              id: "sdeck",
+              type: "Platform",
+              inputs: [{ ref: "sbase" }],
+              placement: { anchor: { x: 0, y: 4, z: 0 }, size: { width: 8, height: 1, length: 8 } },
+            },
+            {
+              id: "srail",
+              type: "RailingRun",
+              inputs: [{ ref: "sdeck" }],
+              placement: { anchor: { x: 0, y: 5, z: 0 }, size: { width: 8, height: 3, length: 1 } },
+              options: { axis: "x" },
+              structural: { supportPolicy: "must_connect_to_input" },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = analyzeComponentPlanSupport(plan);
+
+    expect(result.summary.qualityGate.status).toBe("block");
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "DISCONNECTED_COMPONENT",
+      sourceNodeId: "tower_sec__sdeck__platform",
+    }));
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({
+      code: "FLOATING_SOURCE_NODE",
+      sourceNodeId: "tower_sec__srail__top_rail",
+    }));
   });
 
   it("returns no diagnostics for a fully supported voxel build", () => {

@@ -1,0 +1,126 @@
+{
+  "version": "0.1",
+  "name": "Eave Ring Study",
+  "grid": {
+    "unitBlocks": 1
+  },
+  "policy": {
+    "sizeTier": "small"
+  },
+  "bounds": {
+    "width": 24,
+    "height": 20,
+    "length": 24
+  },
+  "palette": {
+    "foundation": "minecraft:stone_bricks",
+    "wall": "minecraft:stripped_oak_wood",
+    "floor": "minecraft:smooth_stone",
+    "roof": "minecraft:green_concrete",
+    "trim": "minecraft:gold_block"
+  },
+  "components": [
+    {
+      "id": "base",
+      "type": "Foundation",
+      "role": "pavilion_footprint",
+      "placement": {
+        "anchor": { "x": 2, "y": 0, "z": 2 },
+        "size": { "width": 12, "height": 1, "length": 12 }
+      }
+    },
+    {
+      "id": "podium",
+      "type": "SteppedTier",
+      "role": "tiered_podium",
+      "inputs": [{ "ref": "base" }],
+      "placement": {
+        "anchor": { "x": 3, "y": 1, "z": 3 },
+        "size": { "width": 10, "height": 6, "length": 10 }
+      },
+      "options": {
+        "axis": "both",
+        "levels": 2,
+        "stepHeight": 3,
+        "insetPerLevel": 1
+      }
+    },
+    {
+      "id": "eave_lower",
+      "type": "RectRing",
+      "role": "wide_first_eave_band",
+      "inputs": [{ "ref": "podium" }],
+      "placement": {
+        "anchor": { "x": 1, "y": 4, "z": 1 },
+        "size": { "width": 14, "height": 1, "length": 14 }
+      },
+      "options": {
+        "bandWidth": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "eave_upper",
+      "type": "RectRing",
+      "role": "upper_eave_band",
+      "inputs": [{ "ref": "eave_lower" }],
+      "placement": {
+        "anchor": { "x": 3, "y": 7, "z": 3 },
+        "size": { "width": 8, "height": 1, "length": 8 }
+      },
+      "options": {
+        "bandWidth": 1,
+        "height": 1
+      }
+    },
+    {
+      "id": "cap_dome",
+      "type": "SteppedDome",
+      "role": "pavilion_roof_cap",
+      "inputs": [{ "ref": "eave_upper" }],
+      "placement": {
+        "anchor": { "x": 5, "y": 8, "z": 5 },
+        "size": { "width": 4, "height": 3, "length": 4 }
+      },
+      "options": {
+        "levels": 2,
+        "insetPerLevel": 1
+      }
+    },
+    {
+      "id": "entry_stair",
+      "type": "StairRun",
+      "role": "front_entry_stair",
+      "inputs": [{ "ref": "base" }],
+      "placement": {
+        "anchor": { "x": 7, "y": 0, "z": 14 },
+        "size": { "width": 2, "height": 3, "length": 6 }
+      },
+      "options": {
+        "axis": "z",
+        "direction": "positive",
+        "style": "solid",
+        "includeSideRails": true,
+        "sideRailStyle": "handrail"
+      }
+    },
+    {
+      "id": "eave_rail",
+      "type": "RailingRun",
+      "role": "first_eave_railing",
+      "inputs": [{ "ref": "eave_lower" }],
+      "placement": {
+        "anchor": { "x": 1, "y": 5, "z": 1 },
+        "size": { "width": 14, "height": 3, "length": 1 }
+      },
+      "options": {
+        "axis": "x",
+        "postSpacing": 4,
+        "includeTopRail": true
+      },
+      "structural": {
+        "supportPolicy": "decorative"
+      }
+    }
+  ]
+}
