@@ -3972,13 +3972,22 @@ function expandInputs(component: ComponentNode, componentMap: Map<string, Compon
     refs.add(component.placement.source);
   }
 
-  return [...refs].map((ref) => ({
-    ref: nodeId(ref, outputPart(componentMap.get(ref)!)),
-  }));
+  return [...refs].flatMap((ref) => componentInputRefs(ref, componentMap.get(ref)!));
 }
 
 function nodeId(componentId: string, partName: string): string {
   return `${componentId}__${partName}`;
+}
+
+/**
+ * Graph bearing contract: consumers of a multi-segment source depend on every
+ * emitted part, not one canonical segment. Do not collapse to single-ref.
+ */
+function componentInputRefs(ref: string, source: ComponentNode): { ref: string }[] {
+  if (source.type === "RectRing" && (source.options?.cornerRise ?? 0) > 0) {
+    return rectRingPlacements(source).map((placement) => ({ ref: nodeId(ref, placement.part) }));
+  }
+  return [{ ref: nodeId(ref, outputPart(source)) }];
 }
 
 function outputPart(component: ComponentNode): string {

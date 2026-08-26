@@ -178,6 +178,8 @@ The expander translates semantic dependencies into low-level CraftDAG inputs and
 
 For attached and covering components, `placement.target` and `placement.over` are implicit dependencies. Agents may include them in `inputs` for readability, but the expander must add the low-level CraftDAG dependency even when they are omitted.
 
+When a dependency resolves to a multi-segment source component, the expander connects the consumer to every emitted segment instead of one canonical part: a `RectRing` with `cornerRise` bears through all of its `ring_<side>_seg<n>` nodes, so anything resting on a flared eave depends on the whole ring. Flat `RectRing`s keep the legacy single `ring_front` attachment.
+
 ## v0.1 Component Set
 
 Start with a small component vocabulary:
@@ -241,7 +243,7 @@ Use `SteppedDome` for bounded Minecraft-style dome approximations, such as Taj-s
 
 Use `RectRing` for rectangular ring bands around an open interior: eave bands on tiered towers and pagoda-style roofs, cornices, parapets, plinth bands, balcony fascias, and trim frames around courtyards or roof plates. It is the rectangular counterpart to `CircleRing` and expands into at most four axis-aligned band boxes (`ring_front`, `ring_back`, `ring_left`, `ring_right`) inside one anchored bounding box. Use `options.bandWidth` for the inward band thickness and `options.height` for the band height. The band must leave at least a one-block open interior; use `Platform` instead when the surface should be a full slab. Pair it with `SteppedDome` or `CircleRing` for curved caps.
 
-For stepped eave curvature, set `options.cornerRise` to a small non-negative integer: each corner column gains up to that many extra blocks above `options.height`, stepping down over `options.riseSpan` columns (defaults to `cornerRise`, one block per step) toward the middle of each edge. This approximates curved eave edges and corner uplift with deterministic integer segments named `ring_<side>_seg<n>`; keep the ring's inner hole aligned with the tower cross-section at that height so the band bears on the walls. The placement must declare vertical room (`options.height + options.cornerRise <= placement.size.height`) or validation rejects the plan. Flat rings without `cornerRise` expand exactly as before.
+For stepped eave curvature, set `options.cornerRise` to a small non-negative integer: each corner column gains up to that many extra blocks above `options.height`, stepping down over `options.riseSpan` columns (defaults to `cornerRise`, one block per step) toward the middle of each edge. This approximates curved eave edges and corner uplift with deterministic integer segments named `ring_<side>_seg<n>`; keep the ring's inner hole aligned with the tower cross-section at that height so the band bears on the walls. The placement must declare vertical room (`options.height + options.cornerRise <= placement.size.height`) or validation rejects the plan. Flat rings without `cornerRise` expand exactly as before. Components that consume a cornerRise ring through `inputs` are connected to every emitted segment, preserving whole-ring bearing in the expanded graph.
 
 Use `RailingRun` for repeated posts plus horizontal rails along bridges, decks, walls, balconies, and platforms. It is a bounded run, not a fence/pathfinding simulator. Use `postSpacing`, `includeTopRail`, and `includeMidRail` for controlled detail.
 

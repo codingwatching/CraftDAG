@@ -1932,6 +1932,123 @@ describe("ComponentPlan", () => {
     expect(() => validateComponentPlan(plan)).toThrow(/cornerRise/);
   });
 
+  it("connects consumers of a cornerRise RectRing to every emitted eave segment", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Eave Bearing Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+      components: [
+        {
+          id: "flared_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1, cornerRise: 2 },
+          materials: { main: "roof" },
+        },
+        {
+          id: "cupola",
+          type: "Platform",
+          inputs: [{ ref: "flared_eave" }],
+          placement: { anchor: { x: 6, y: 9, z: 6 }, size: { width: 4, height: 1, length: 4 } },
+          materials: { main: "wall" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const eaveSegmentIds = craftDag.nodes
+      .filter((node) => node.id.startsWith("flared_eave__"))
+      .map((node) => node.id)
+      .sort();
+    const cupolaInputs = craftDag.nodes
+      .find((node) => node.id === "cupola__platform")!
+      .inputs!.map((input) => input.ref)
+      .sort();
+
+    expect(eaveSegmentIds.length).toBe(20);
+    expect(cupolaInputs).toEqual(eaveSegmentIds);
+  });
+
+  it("keeps consumers of a flat RectRing attached only to the legacy front band", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Flat Eave Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+      components: [
+        {
+          id: "flat_eave",
+          type: "RectRing",
+          placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width: 8, height: 3, length: 8 } },
+          options: { bandWidth: 1, height: 1 },
+          materials: { main: "roof" },
+        },
+        {
+          id: "cupola",
+          type: "Platform",
+          inputs: [{ ref: "flat_eave" }],
+          placement: { anchor: { x: 6, y: 9, z: 6 }, size: { width: 4, height: 1, length: 4 } },
+          materials: { main: "wall" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+    const cupolaInputs = craftDag.nodes.find((node) => node.id === "cupola__platform")!.inputs!;
+
+    expect(cupolaInputs).toEqual([{ ref: "flat_eave__ring_front" }]);
+  });
+
+  it("resolves every expanded input ref to an emitted node across RectRing configurations", () => {
+    const widths = [8, 9, 12];
+    const rises = [0, 1, 2, 3];
+    const riseSpans = [undefined, 2, 5];
+
+    for (const width of widths) {
+      for (const cornerRise of rises) {
+        for (const riseSpan of riseSpans) {
+          if (cornerRise === 0 && riseSpan !== undefined) continue;
+
+          const plan: ComponentPlanDocument = {
+            version: "0.1",
+            name: `Rect Ring Ref Invariant ${width}/${cornerRise}/${riseSpan ?? "default"}`,
+            bounds: { width: 20, height: 16, length: 20 },
+            palette: { roof: "minecraft:green_concrete", wall: "minecraft:stone_bricks" },
+            components: [
+              {
+                id: "eave",
+                type: "RectRing",
+                placement: { anchor: { x: 4, y: 6, z: 4 }, size: { width, height: 4, length: width } },
+                options: {
+                  bandWidth: 1,
+                  height: 1,
+                  ...(cornerRise > 0 ? { cornerRise, ...(riseSpan ? { riseSpan } : {}) } : {}),
+                },
+                materials: { main: "roof" },
+              },
+              {
+                id: "cap",
+                type: "Platform",
+                inputs: [{ ref: "eave" }],
+                placement: { anchor: { x: 7, y: 11, z: 7 }, size: { width: 4, height: 1, length: 4 } },
+                materials: { main: "wall" },
+              },
+            ],
+          };
+
+          const craftDag = expandComponentPlan(plan);
+          const emittedIds = new Set(craftDag.nodes.map((node) => node.id));
+          for (const node of craftDag.nodes) {
+            for (const input of node.inputs ?? []) {
+              expect(emittedIds.has(input.ref)).toBe(true);
+            }
+          }
+        }
+      }
+    }
+  });
+
   it("expands Light components for interior utility lighting", () => {
     const plan: ComponentPlanDocument = {
       version: "0.1",
