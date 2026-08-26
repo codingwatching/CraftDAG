@@ -1590,6 +1590,218 @@ describe("ComponentPlan", () => {
     expect(() => compileComponentPlan(plan)).not.toThrow();
   });
 
+  it("expands StairRun handrail side rails that follow the stair profile", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Stair Handrail Study",
+      bounds: { width: 12, height: 8, length: 14 },
+      palette: {
+        floor: "minecraft:stone_bricks",
+        trim: "minecraft:spruce_planks",
+      },
+      components: [
+        {
+          id: "main_stair",
+          type: "StairRun",
+          role: "main_deck_stair",
+          placement: {
+            anchor: { x: 2, y: 1, z: 3 },
+            size: { width: 3, height: 4, length: 8 },
+          },
+          options: {
+            axis: "z",
+            direction: "positive",
+            style: "solid",
+            includeSideRails: true,
+            sideRailStyle: "handrail",
+          },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+
+    expect(craftDag.nodes.map((node) => node.id)).toEqual([
+      "main_stair__step_0",
+      "main_stair__step_1",
+      "main_stair__step_2",
+      "main_stair__step_3",
+      "main_stair__left_handrail_step_0",
+      "main_stair__right_handrail_step_0",
+      "main_stair__left_handrail_step_1",
+      "main_stair__right_handrail_step_1",
+      "main_stair__left_handrail_step_2",
+      "main_stair__right_handrail_step_2",
+      "main_stair__left_handrail_step_3",
+      "main_stair__right_handrail_step_3",
+    ]);
+    expect(craftDag.nodes[4]).toMatchObject({
+      id: "main_stair__left_handrail_step_0",
+      params: {
+        from: [2, 2, 3],
+        to: [2, 2, 4],
+        block: "trim",
+      },
+    });
+    expect(craftDag.nodes[5]).toMatchObject({
+      id: "main_stair__right_handrail_step_0",
+      params: {
+        from: [4, 2, 3],
+        to: [4, 2, 4],
+      },
+    });
+    expect(craftDag.nodes[10]).toMatchObject({
+      id: "main_stair__left_handrail_step_3",
+      params: {
+        from: [2, 5, 9],
+        to: [2, 5, 10],
+      },
+    });
+    const railCells = new Set(
+      craftDag.nodes
+        .filter((node) => node.id.includes("handrail"))
+        .flatMap((node) => {
+          const { from, to } = (node.params as { from: number[]; to: number[] });
+          const cells: string[] = [];
+          for (let x = from[0]; x <= to[0]; x++) {
+            for (let y = from[1]; y <= to[1]; y++) {
+              for (let z = from[2]; z <= to[2]; z++) {
+                cells.push(`${x},${y},${z}`);
+              }
+            }
+          }
+          return cells;
+        })
+    );
+    expect(railCells.size).toBe(16);
+    for (const cell of railCells) {
+      const [x, y] = cell.split(",").map(Number);
+      expect(x === 2 || x === 4).toBe(true);
+      expect(y).toBeGreaterThanOrEqual(2);
+      expect(y).toBeLessThanOrEqual(5);
+    }
+    expect(() => compileComponentPlan(plan)).not.toThrow();
+  });
+
+  it("rejects solid side rails on narrow stairs while allowing handrails", () => {
+    const basePlan = (): ComponentPlanDocument => ({
+      version: "0.1",
+      name: "Narrow Stair Study",
+      bounds: { width: 8, height: 8, length: 8 },
+      palette: {
+        floor: "minecraft:stone_bricks",
+        trim: "minecraft:spruce_planks",
+      },
+      components: [
+        {
+          id: "narrow_stair",
+          type: "StairRun",
+          placement: {
+            anchor: { x: 1, y: 0, z: 1 },
+            size: { width: 2, height: 3, length: 4 },
+          },
+          options: {
+            axis: "z",
+            includeSideRails: true,
+          },
+        },
+      ],
+    });
+
+    const plan = basePlan();
+    expect(() => validateComponentPlan(plan)).toThrow(/solid side rails|width/);
+
+    const handrailPlan = basePlan();
+    handrailPlan.components[0] = {
+      ...handrailPlan.components[0],
+      options: { axis: "z" as const, includeSideRails: true, sideRailStyle: "handrail" as const },
+    };
+    expect(() => validateComponentPlan(handrailPlan)).not.toThrow();
+  });
+
+  it("expands RectRing components into four bounded eave bands", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Eave Ring Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: {
+        roof: "minecraft:green_concrete",
+        trim: "minecraft:gold_block",
+      },
+      components: [
+        {
+          id: "eave_ring",
+          type: "RectRing",
+          role: "wide_eave_band",
+          inputs: [],
+          placement: { anchor: { x: 2, y: 4, z: 2 }, size: { width: 8, height: 1, length: 8 } },
+          options: { bandWidth: 2, height: 1 },
+          materials: { main: "roof" },
+        },
+      ],
+    };
+
+    const craftDag = expandComponentPlan(plan);
+
+    expect(craftDag.nodes.map((node) => node.id)).toEqual([
+      "eave_ring__ring_front",
+      "eave_ring__ring_back",
+      "eave_ring__ring_left",
+      "eave_ring__ring_right",
+    ]);
+    expect(craftDag.nodes[0]).toMatchObject({
+      params: { from: [2, 4, 2], to: [9, 4, 3], block: "roof" },
+    });
+    expect(craftDag.nodes[1]).toMatchObject({
+      params: { from: [2, 4, 8], to: [9, 4, 9] },
+    });
+    expect(craftDag.nodes[2]).toMatchObject({
+      params: { from: [2, 4, 4], to: [3, 4, 7] },
+    });
+    expect(craftDag.nodes[3]).toMatchObject({
+      params: { from: [8, 4, 4], to: [9, 4, 7] },
+    });
+
+    const occupied = new Set(
+      craftDag.nodes.flatMap((node) => {
+        const { from, to } = (node.params as { from: number[]; to: number[] });
+        const cells: string[] = [];
+        for (let x = from[0]; x <= to[0]; x++) {
+          for (let y = from[1]; y <= to[1]; y++) {
+            for (let z = from[2]; z <= to[2]; z++) {
+              cells.push(`${x},${y},${z}`);
+            }
+          }
+        }
+        return cells;
+      })
+    );
+    expect(occupied.size).toBe(48);
+    expect(occupied.has("5,4,5")).toBe(false);
+    expect(() => compileComponentPlan(plan)).not.toThrow();
+  });
+
+  it("rejects RectRing bands that leave no open interior", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Broken Eave Ring Study",
+      bounds: { width: 16, height: 12, length: 16 },
+      palette: {
+        roof: "minecraft:green_concrete",
+      },
+      components: [
+        {
+          id: "tight_ring",
+          type: "RectRing",
+          placement: { anchor: { x: 2, y: 4, z: 2 }, size: { width: 8, height: 1, length: 8 } },
+          options: { bandWidth: 4 },
+        },
+      ],
+    };
+
+    expect(() => validateComponentPlan(plan)).toThrow(/bandWidth|interior/);
+  });
+
   it("expands Light components for interior utility lighting", () => {
     const plan: ComponentPlanDocument = {
       version: "0.1",

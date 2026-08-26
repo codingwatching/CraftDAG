@@ -16,6 +16,7 @@ describe("ComponentPlan large examples", () => {
   const examplesDir = path.resolve(dirname, "../../../examples/component-plans");
   const examples = [
     "arcade-bracket-study.componentplan.json",
+    "eave-ring-study.componentplan.json",
     "fortified-wall-shape.componentplan.json",
     "giant-wild-goose-pagoda-study.componentplan.json",
     "large-form-massing.componentplan.json",

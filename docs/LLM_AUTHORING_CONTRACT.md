@@ -106,7 +106,7 @@ Use `Compartment` for generic interior rooms such as cabins, holds, boiler rooms
 
 Use `Corridor` for open-ended circulation runs inside large builds. It creates a floor, two side walls, and an optional ceiling. Set `options.axis` when the intended direction is ambiguous.
 
-Use `StairRun` for vertical circulation between levels: survival bases, castle towers, ship decks, underground bases, palaces, dungeons, and subway entrances. Size the horizontal run at least as long as the height. Use `includeSideRails` only when the perpendicular width is at least 3. Do not use it for spiral stairs, elevators, ramps, or decorative tiering.
+Use `StairRun` for vertical circulation between levels: survival bases, castle towers, ship decks, underground bases, palaces, dungeons, and subway entrances. Size the horizontal run at least as long as the height. Use `includeSideRails` only when the perpendicular width is at least 3, or at least 2 with `options.sideRailStyle: "handrail"` for thin slope-following rails instead of full-height side walls. Do not use it for spiral stairs, elevators, ramps, or decorative tiering.
 
 Use `FloorStack` for multi-level towers, pagodas, stair towers, and other vertically stacked room-like levels. It expands into stacked `RoomShell` tiers with circulation between levels. Set `options.stairStyle` to `"stair"` for stair runs or `"ladder"` for ladder columns. Use `materials.circulation` to set the ladder/stair block material (e.g. `"minecraft:ladder"`). Set `options.stairSide` to control which face the circulation opens onto. When `stairStyle: "stair"` is requested but the level is too narrow for stairs, the engine silently falls back to `"ladder"`. Use `options.includeDoorways` and `options.includeWindows` for per-level openings.
 
@@ -119,6 +119,8 @@ Use `VerticalSetbackVolume` for tall height-driven setback massing: Burj-style t
 Use `SteppedDome` for bounded Minecraft-style dome roofs and caps: Taj-style domes, temple or mosque roofs, observatories, rotundas, and fantasy tower crowns. Prefer it over manually stacking many `Platform` components. Do not invent `TajMahalDome`, `MosqueDome`, or landmark-specific dome types.
 
 Use `RailingRun` for bounded posts and rails along decks, bridges, walls, and balconies. Prefer it over manually listing many posts. Use `postSpacing` for rhythm and `includeMidRail` for extra detail.
+
+Use `RectRing` for rectangular eave bands, cornices, parapets, plinth bands, and trim frames with an open interior. Set `options.bandWidth` for band thickness; keep at least a one-block open hole. Use `Platform` for full slabs and `CircleRing` for circular rings. Do not invent pagoda-eave or landmark-specific ring types.
 
 Use `ArcadeRun` for repeated stepped arch-like facade rhythms: colosseum bays, gothic arcades, palace cloisters, bridge arches, and monumental walls. Do not try to describe exact curves; use Minecraft-like blocky arches.
 

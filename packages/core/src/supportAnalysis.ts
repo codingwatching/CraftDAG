@@ -154,15 +154,19 @@ function analyzeVoxelSupportInternal(
   );
 
   // Reclassify: sub-parts of known components (e.g. upper SteppedDome tiers)
-  // should produce review-level diagnostics, not blocking ones.
+  // should produce review-level diagnostics, not blocking ones — but only when
+  // their owning component still has connected blocks. A nested component that
+  // is entirely disconnected must stay blocking so true floating is reported.
   const sourceStructural = options.sourceStructural ?? [];
   const knownParentPrefixes = new Set(sourceStructural.map((e) => e.prefix));
+  const connectedAncestorPrefixes = collectConnectedAncestorPrefixes(blocks, connected);
 
-  const blockingDisconnected = disconnected.filter((block) => {
-    return !anyParentKnown(block.sourceNodeId ?? "unknown", knownParentPrefixes);
-  });
   const reviewDisconnected = disconnected.filter((block) => {
-    return anyParentKnown(block.sourceNodeId ?? "unknown", knownParentPrefixes);
+    const sourceNodeId = block.sourceNodeId ?? "unknown";
+    return hasConnectedKnownAncestor(sourceNodeId, knownParentPrefixes, connectedAncestorPrefixes);
+  });
+  const blockingDisconnected = disconnected.filter((block) => {
+    return !reviewDisconnected.includes(block);
   });
   const diagnostics = [
     ...groupsToDiagnostics(
@@ -636,13 +640,32 @@ function parentSourceId(sourceNodeId: string): string | null {
   return lastSep > 0 ? sourceNodeId.slice(0, lastSep) : null;
 }
 
-function anyParentKnown(sourceNodeId: string, knownPrefixes: Set<string>): boolean {
+function collectConnectedAncestorPrefixes(blocks: VoxelBlock[], connected: Set<string>): Set<string> {
+  const prefixes = new Set<string>();
+  for (const block of blocks) {
+    if (!connected.has(posKey(block.pos))) continue;
+    const sourceNodeId = block.sourceNodeId ?? "unknown";
+    prefixes.add(sourceNodeId);
+    for (let current = sourceNodeId; current.includes("__");) {
+      const parent = parentSourceId(current);
+      if (!parent) break;
+      prefixes.add(parent);
+      current = parent;
+    }
+  }
+  return prefixes;
+}
+
+function hasConnectedKnownAncestor(sourceNodeId: string, knownPrefixes: Set<string>, connectedPrefixes: Set<string>): boolean {
   const sepCount = (sourceNodeId.match(/__/g) || []).length;
   if (sepCount < 2) return false;
+  if (connectedPrefixes.has(sourceNodeId)) return true;
   for (let current = sourceNodeId; current.includes("__");) {
     const parent = parentSourceId(current);
     if (!parent) return false;
-    if (knownPrefixes.has(parent)) return true;
+    if (knownPrefixes.has(parent)) {
+      return connectedPrefixes.has(parent);
+    }
     current = parent;
   }
   return false;
