@@ -578,6 +578,7 @@ const PathRepeatPlacementSchema = z.object({
   path: EllipsePathSchema,
   source: z.string().min(1),
   count: PositiveIntSchema,
+  y: NonNegativeIntSchema,
   startAngle: z.number().min(0).max(360),
   endAngle: z.number().min(0).max(360),
   closed: z.boolean(),
@@ -2416,7 +2417,7 @@ function pathRepeatSamples(component: Extract<ComponentNode, { type: "PathRepeat
   index: number;
 }[] {
   const { path, count, startAngle, endAngle, closed, orientToTangent } = component.placement;
-  const sweep = ellipsePathSweep(startAngle, endAngle);
+  const sweep = closed ? 360 : ellipsePathSweep(startAngle, endAngle);
   const samples: { x: number; z: number; angle: number; index: number }[] = [];
   for (let index = 0; index < count; index += 1) {
     const fraction = closed ? index / count : index / (count - 1);
@@ -2474,7 +2475,7 @@ function expandPathRepeatNodes(
     const sampleCenterZ = sample.z * unit + (unit - 1) / 2;
     const shift: Vec3 = [
       Math.round(sampleCenterX - pivotX),
-      0,
+      component.placement.y * unit,
       Math.round(sampleCenterZ - pivotZ),
     ];
     for (const node of rotatedNodes) {
@@ -2540,12 +2541,12 @@ function validateEllipseRingBounds(
 function validatePathRepeatSemantics(component: Extract<ComponentNode, { type: "PathRepeat" }>): void {
   const { startAngle, endAngle, closed, count } = component.placement;
   const sweep = ellipsePathSweep(startAngle, endAngle);
-  if (closed && sweep !== 360) {
+  if (closed && sweep !== 360 && startAngle !== endAngle) {
     throw componentValidationError({
       code: "INVALID_PATH_REPEAT_ARC",
       componentId: component.id,
-      message: `PathRepeat "${component.id}" marks an ellipse arc as closed but its angle span is ${sweep} degrees.`,
-      repairHint: "Use startAngle/endAngle that cover exactly one full turn (0° to 360°), or set closed to false.",
+      message: `PathRepeat "${component.id}" marks an ellipse arc as closed but its angles do not describe a full turn.`,
+      repairHint: "For a closed path, use the same startAngle/endAngle as the phase or retain the legacy 0° to 360° pair; set closed to false for a partial arc.",
     });
   }
   if (!closed && (count < 2 || sweep === 0)) {
@@ -2553,7 +2554,7 @@ function validatePathRepeatSemantics(component: Extract<ComponentNode, { type: "
       code: "INVALID_PATH_REPEAT_ARC",
       componentId: component.id,
       message: `Open PathRepeat "${component.id}" needs at least two samples over a non-zero ellipse arc.`,
-      repairHint: "Set count to at least 2 and choose distinct startAngle and endAngle values.",
+      repairHint: "Set count to at least 2 and choose distinct startAngle and endAngle values for an open arc.",
     });
   }
 }
@@ -2623,6 +2624,7 @@ function validatePathRepeatEnvelope(
   const localWidth = assembly.bounds.width * unit;
   const localHeight = assembly.bounds.height * unit;
   const localLength = assembly.bounds.length * unit;
+  const shiftY = component.placement.y * unit;
   const pivotX = (localWidth - 1) / 2;
   const pivotZ = (localLength - 1) / 2;
   const blockBounds: Vec3 = [bounds.width * unit, bounds.height * unit, bounds.length * unit];
@@ -2642,15 +2644,17 @@ function validatePathRepeatEnvelope(
     ] as Vec3).map(([x, y, z]) => [x + shiftX, y, z + shiftZ]);
     const minX = Math.min(...corners.map(([x]) => x));
     const maxX = Math.max(...corners.map(([x]) => x));
+    const minY = shiftY;
+    const maxY = shiftY + localHeight - 1;
     const minZ = Math.min(...corners.map(([, , z]) => z));
     const maxZ = Math.max(...corners.map(([, , z]) => z));
-    if (minX < 0 || maxX >= blockBounds[0] || localHeight > blockBounds[1] || minZ < 0 || maxZ >= blockBounds[2]) {
+    if (minX < 0 || maxX >= blockBounds[0] || minY < 0 || maxY >= blockBounds[1] || minZ < 0 || maxZ >= blockBounds[2]) {
       throw componentValidationError({
         code: "PATH_REPEAT_OUT_OF_BOUNDS",
         componentId: component.id,
         assemblyId: assembly.id,
         instanceId: `${component.id}__${assembly.id}_${sample.index}`,
-        message: `PathRepeat "${component.id}" source "${assembly.id}" sample ${sample.index} rotated assembly envelope x=${minX}..${maxX}, y=0..${localHeight - 1}, z=${minZ}..${maxZ} exceeds ComponentPlan bounds.`,
+        message: `PathRepeat "${component.id}" source "${assembly.id}" sample ${sample.index} rotated assembly envelope x=${minX}..${maxX}, y=${minY}..${maxY}, z=${minZ}..${maxZ} exceeds ComponentPlan bounds.`,
         repairHint: "Move the ellipse path inward, reduce the source assembly envelope, or enlarge the plan bounds for the rotated bay.",
       });
     }

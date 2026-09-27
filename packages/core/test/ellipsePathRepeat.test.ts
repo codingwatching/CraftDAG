@@ -85,6 +85,7 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           path: { type: "ellipse", center: { x: 20, z: 16 }, radiusX: 12, radiusZ: 8 },
           source: "bay_module",
           count: 24,
+          y: 0,
           startAngle: 0,
           endAngle: 360,
           closed: true,
@@ -105,6 +106,77 @@ describe("EllipseRing and ellipse PathRepeat", () => {
     expect(document.nodes.every(({ params }) => [...params.from, ...params.to].every(Number.isInteger))).toBe(true);
     expect(voxel.blocks.every(({ pos }) => pos.every(Number.isInteger))).toBe(true);
     expect(support.sourceSummaries.some(({ sourceNodeId }) => sourceNodeId.startsWith("arcade__bay_module_0__"))).toBe(true);
+    expect(() => validateComponentPlan(plan)).not.toThrow();
+  });
+
+  it("reuses one assembly definition at two global Y levels and allows closed-loop phase", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Vertically Reused Phased Ellipse Assembly",
+      grid: { unitBlocks: 2 },
+      bounds: { width: 20, height: 6, length: 14 },
+      palette: { floor: "minecraft:stone" },
+      assemblies: [{
+        id: "bay",
+        bounds: { width: 1, height: 1, length: 1 },
+        components: [{
+          id: "marker",
+          type: "Platform",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 1, height: 1, length: 1 } },
+        }],
+      }],
+      components: [
+        {
+          id: "lower_arcade",
+          type: "PathRepeat",
+          placement: {
+            path: { type: "ellipse", center: { x: 10, z: 7 }, radiusX: 6, radiusZ: 3 },
+            source: "bay",
+            count: 8,
+            y: 0,
+            startAngle: 22.5,
+            endAngle: 22.5,
+            closed: true,
+            orientToTangent: true,
+          },
+        },
+        {
+          id: "upper_arcade",
+          type: "PathRepeat",
+          placement: {
+            path: { type: "ellipse", center: { x: 10, z: 7 }, radiusX: 6, radiusZ: 3 },
+            source: "bay",
+            count: 8,
+            y: 3,
+            startAngle: 22.5,
+            endAngle: 22.5,
+            closed: true,
+            orientToTangent: true,
+          },
+        },
+      ],
+    };
+
+    const document = expandComponentPlan(plan);
+    const voxel = compileComponentPlan(plan);
+    const lowerIds = new Set(document.nodes.map(({ id }) => id.match(/^lower_arcade__bay_(\d+)__/)?.[1]).filter(Boolean));
+    const upperIds = new Set(document.nodes.map(({ id }) => id.match(/^upper_arcade__bay_(\d+)__/)?.[1]).filter(Boolean));
+    const xzAtEachLevel = new Map<number, Set<string>>();
+    for (const { pos } of voxel.blocks) {
+      const level = pos[1] < 6 ? pos[1] : pos[1] - 6;
+      const positions = xzAtEachLevel.get(level) ?? new Set<string>();
+      positions.add(`${pos[0]},${pos[2]}`);
+      xzAtEachLevel.set(level, positions);
+    }
+
+    expect(lowerIds.size).toBe(8);
+    expect(upperIds.size).toBe(8);
+    expect(new Set(voxel.blocks.map(({ pos }) => pos[1]))).toEqual(new Set([0, 1, 6, 7]));
+    expect(voxel.blocks.some(({ sourceNodeId, pos }) => sourceNodeId?.startsWith("lower_arcade__bay_0__") && pos[0] === 32 && pos[2] === 16)).toBe(true);
+    const positionsByLevel = [...xzAtEachLevel.values()];
+    expect(positionsByLevel).toHaveLength(2);
+    expect(positionsByLevel[0]?.size).toBe(32);
+    expect(positionsByLevel[1]).toEqual(positionsByLevel[0]);
     expect(() => validateComponentPlan(plan)).not.toThrow();
   });
 
@@ -131,6 +203,7 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           path: { type: "ellipse", center: { x: 10, z: 7 }, radiusX: 8, radiusZ: 5 },
           source: "marker_module",
           count: 9,
+          y: 0,
           startAngle: 0,
           endAngle: 180,
           closed: false,
@@ -173,6 +246,7 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           path: { type: "ellipse", center: { x: 6, z: 6 }, radiusX: 5, radiusZ: 5 },
           source: "wide_module",
           count: 4,
+          y: 0,
           startAngle: 0,
           endAngle: 360,
           closed: true,
@@ -221,6 +295,7 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           path: { type: "ellipse", center: { x: 6, z: 6 }, radiusX: 3, radiusZ: 2 },
           source: "bay",
           count: 1,
+          y: 0,
           startAngle: 0,
           endAngle: 360,
           closed: true,
@@ -240,6 +315,103 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           assemblyId: "bay",
           instanceId: "edge_path__bay_0",
           message: expect.stringContaining("rotated assembly envelope"),
+        }),
+      ]);
+    }
+  });
+
+  it("rejects a shifted assembly envelope that leaves plan bounds even if its emitted voxel fits", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Shifted Vertical Envelope Fixture",
+      bounds: { width: 12, height: 3, length: 12 },
+      palette: { trim: "minecraft:stone" },
+      assemblies: [{
+        id: "local_bay",
+        bounds: { width: 1, height: 2, length: 1 },
+        components: [{
+          id: "base_post",
+          type: "SupportPost",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 1, height: 1, length: 1 } },
+          materials: { main: "trim" },
+        }],
+      }],
+      components: [{
+        id: "raised_path",
+        type: "PathRepeat",
+        placement: {
+          path: { type: "ellipse", center: { x: 6, z: 6 }, radiusX: 3, radiusZ: 2 },
+          source: "local_bay",
+          count: 1,
+          y: 2,
+          startAngle: 0,
+          endAngle: 360,
+          closed: true,
+          orientToTangent: false,
+        },
+      }],
+    };
+
+    expect(() => validateComponentPlan(plan)).toThrow(ValidationError);
+    try {
+      validateComponentPlan(plan);
+    } catch (error) {
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          code: "PATH_REPEAT_OUT_OF_BOUNDS",
+          componentId: "raised_path",
+          assemblyId: "local_bay",
+          instanceId: "raised_path__local_bay_0",
+          message: expect.stringContaining("y=2..3"),
+        }),
+      ]);
+    }
+  });
+
+  it("reports an emitted voxel outside height after applying placement.y", () => {
+    const plan: ComponentPlanDocument = {
+      version: "0.1",
+      name: "Shifted Emitted Voxel Bounds Fixture",
+      bounds: { width: 12, height: 3, length: 12 },
+      palette: { trim: "minecraft:stone" },
+      assemblies: [{
+        id: "post_module",
+        bounds: { width: 1, height: 1, length: 1 },
+        components: [{
+          id: "post",
+          type: "SupportPost",
+          placement: { anchor: { x: 0, y: 0, z: 0 }, size: { width: 1, height: 1, length: 1 } },
+          materials: { main: "trim" },
+        }],
+      }],
+      components: [{
+        id: "high_path",
+        type: "PathRepeat",
+        placement: {
+          path: { type: "ellipse", center: { x: 6, z: 6 }, radiusX: 3, radiusZ: 2 },
+          source: "post_module",
+          count: 1,
+          y: 3,
+          startAngle: 0,
+          endAngle: 360,
+          closed: true,
+          orientToTangent: false,
+        },
+      }],
+    };
+
+    expect(() => validateComponentPlan(plan)).toThrow(ValidationError);
+    try {
+      validateComponentPlan(plan);
+    } catch (error) {
+      expect((error as ValidationError).details).toEqual([
+        expect.objectContaining({
+          code: "PATH_REPEAT_OUT_OF_BOUNDS",
+          componentId: "high_path",
+          assemblyId: "post_module",
+          instanceId: "high_path__post_module_0",
+          sourceNodeId: expect.stringContaining("high_path__post_module_0__"),
+          message: expect.stringContaining("emits voxel"),
         }),
       ]);
     }
@@ -301,6 +473,7 @@ describe("EllipseRing and ellipse PathRepeat", () => {
           path: { type: "ellipse", center: { x: 16, z: 16 }, radiusX: 1, radiusZ: 1 },
           source: "large_envelope",
           count: 5,
+          y: 0,
           startAngle: 0,
           endAngle: 180,
           closed: false,

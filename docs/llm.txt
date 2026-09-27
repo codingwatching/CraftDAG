@@ -37,7 +37,7 @@ When to use key components
 - VerticalSetbackVolume: tall towers, pagodas, skyscrapers, spires.
 - SteppedDome: Minecraft-style dome roofs and caps.
 - EllipseRing: true bounded oval shell using integer center and radii.
-- PathRepeat: count-based ellipse path for a reusable assembly; closed paths omit the seam sample, open paths include both endpoints, and orientToTangent aligns local +X.
+- PathRepeat: count-based ellipse path for a reusable assembly; non-negative integer `placement.y` globally offsets local assembly Y, closed paths omit the seam and allow phase with equal start/end angles, open paths include both endpoints, and orientToTangent aligns local +X.
 - ArcadeRun: repeated blocky arches in facades or bridges.
 - SupportBracket: visible supports under overhangs, balconies, lifeboat shelves.
 - TreeCanopy, OrganicPatch, PathRun, RockCluster: landscape and garden detail.

@@ -191,6 +191,7 @@ export interface PathRepeatPlacement {
   path: EllipsePath;
   source: string;
   count: number;
+  y: number;
   startAngle: number;
   endAngle: number;
   closed: boolean;
