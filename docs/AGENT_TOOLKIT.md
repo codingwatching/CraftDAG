@@ -5,6 +5,7 @@ This guide is for coding and harness agents that author CraftDAG build plans in 
 Use it with:
 
 - `docs/llm.txt`
+- `docs/COMPLEX_BUILD_AUTHORING.md` for semantic / mesh / hybrid route selection and reproducible freeform authoring
 - `docs/COMPONENT_PLAN_SPEC.md`
 - `docs/LLM_AUTHORING_CONTRACT.md`
 - `docs/LARGE_BUILDS.md`
@@ -20,20 +21,21 @@ natural-language build intent
 -> materials, layers, preview, schematic export
 ```
 
-ComponentPlan is the primary agent-authored format. Agents should not directly hand-place hundreds of low-level boxes unless they are debugging the compiler or writing a tiny fixture.
+ComponentPlan is the primary agent-authored format for semantic architecture. For complex briefs, select the route first using `docs/COMPLEX_BUILD_AUTHORING.md`; mesh/freeform candidates enter through the adapter and still converge on VoxelPlan. Agents should not directly hand-place hundreds of low-level boxes unless they are debugging the compiler or writing a tiny fixture.
 
 ## Recommended Loop
 
 1. Read `docs/llm.txt`.
-2. Pick the nearest example from `examples/component-plans`.
-3. Draft or edit one ComponentPlan JSON file.
-4. Run validation through the test suite or a small local script using `validateComponentPlan`.
-5. Expand with `expandComponentPlan` when debugging generated CraftDAG node IDs.
-6. Compile with `compileComponentPlan` to inspect voxel output.
-7. Inspect materials, layers, budget diagnostics, and support diagnostics.
-8. Repair the ComponentPlan.
-9. Repeat until valid and recognizable.
-10. Export or hand the plan to MinePilot preview once package versions are aligned.
+2. For a complex build, read `docs/COMPLEX_BUILD_AUTHORING.md` and write its short route record before authoring.
+3. If semantic pressure wins, pick the nearest example from `examples/component-plans`; if mesh/freeform wins, follow the pinned OBJ → adapter workflow and preserve its evidence.
+4. Draft or edit ComponentPlan JSON for the semantic route or semantic part of a hybrid.
+5. Run validation through the test suite or a small local script using `validateComponentPlan`.
+6. Expand with `expandComponentPlan` when debugging generated CraftDAG node IDs.
+7. Compile semantic output with `compileComponentPlan`; convert mesh output with the adapter. Both produce VoxelPlan.
+8. Inspect materials, layers, budget diagnostics, support diagnostics, and preview.
+9. Repair the smallest failing source and preserve route-specific evidence.
+10. Repeat until valid and recognizable, or stop and switch/downscope per the complex-build guide.
+11. Export or hand the final VoxelPlan to MinePilot preview once package versions are aligned.
 
 ## Current Commands
 

@@ -1,11 +1,12 @@
 CraftDAG model authoring quick context
 
 Goal
-Author ComponentPlan JSON for Minecraft builds. ComponentPlan is the agent-authored DSL. CraftDAG expands it to low-level CraftDAG IR, compiles it to VoxelPlan target state, and can export Sponge .schem files.
+Author semantic Minecraft builds as ComponentPlan JSON. For complex briefs, first choose semantic, mesh/freeform, or hybrid from representation fit. ComponentPlan expands through CraftDAG to VoxelPlan; OBJ mesh enters through adapter-mesh and also ends at VoxelPlan. Both use the existing preview and export path.
 
 Primary docs
 - docs/COMPONENT_PLAN_SPEC.md: complete ComponentPlan schema and semantics.
 - docs/LLM_AUTHORING_CONTRACT.md: model-facing rules, anti-patterns, and examples.
+- docs/COMPLEX_BUILD_AUTHORING.md: choose semantic, mesh/freeform, or hybrid by representation fit; includes reproducible OBJ → VoxelPlan workflow and evidence rules.
 - docs/LARGE_BUILDS.md: sections, assemblies, instances, and large-build decomposition.
 - docs/SHAPE_PRIMITIVES.md: large-form, facade, support, landscape, path, rock, stair, and dome primitives.
 - docs/AGENT_TOOLKIT.md: harness-agent workflow and current command contracts.
@@ -21,6 +22,7 @@ Authoring rules
 8. Use sections for large builds that are hard to reason about in one coordinate space.
 9. Downscope before producing huge flat component arrays.
 10. If validation fails, repair the plan instead of loosening schema or validation.
+11. For complex builds, write the short route record in `docs/COMPLEX_BUILD_AUTHORING.md` first; size alone never selects mesh.
 
 Allowed ComponentPlan components
 Foundation, Platform, Beam, RoomShell, Compartment, Corridor, StairRun, FloorStack, TaperedVolume, SteppedTier, VerticalSetbackVolume, SteppedDome, RectRing, EllipseRing, PathRepeat, RailingRun, ArcadeRun, SupportBracket, TreeCanopy, OrganicPatch, PathRun, RockCluster, Light, Door, Window, Opening, Portal, GableRoof, FlatRoof, SupportPost, Repeat, Instance.
@@ -65,4 +67,4 @@ Current limitations
 - Do not use nested Instance inside assemblies.
 - Do not synthesize arbitrary redstone circuits yet.
 - Do not require exact landmark replication, sculpture-level details, or smooth curves.
-- Ring/radial array primitives are future work; approximate with assemblies and existing primitives for now.
+- Do not assume generic curves, arbitrary mesh materials, or mesh-to-ComponentPlan recovery; use only the documented components and bounded OBJ adapter contract.
