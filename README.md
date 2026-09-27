@@ -55,6 +55,7 @@ Start here:
 - [Project Brief](docs/PROJECT_BRIEF.md)
 - [ComponentPlan v0.1 Spec](docs/COMPONENT_PLAN_SPEC.md)
 - [LLM Authoring Contract](docs/LLM_AUTHORING_CONTRACT.md)
+- [Complex Build Authoring Workflow](docs/COMPLEX_BUILD_AUTHORING.md)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 
 ## Relationship with MinePilot

@@ -4,7 +4,9 @@ This is the model-facing contract for agents that generate Minecraft build plans
 
 For short prompt context, start with `docs/llm.txt`. For repository-based harness agents, also read `docs/AGENT_TOOLKIT.md`.
 
-For product workflows, generate `ComponentPlan` first. Raw CraftDAG is the lower-level compiler IR and should mainly be used for fixtures, tests, debugging, and fallback generation.
+For complex briefs, decide semantic vs mesh/freeform vs hybrid from representation fit using `docs/COMPLEX_BUILD_AUTHORING.md` before writing the plan. This workflow does not replace the ComponentPlan schema or its authoring rules.
+
+For semantic architecture, generate `ComponentPlan` first. For complex briefs, select semantic, mesh/freeform, or hybrid using `docs/COMPLEX_BUILD_AUTHORING.md`; mesh geometry enters through the adapter and need not be reconstructed as ComponentPlan. Raw CraftDAG remains the lower-level compiler IR and should mainly be used for fixtures, tests, debugging, and fallback generation.
 
 ```text
 natural language / future reference input
