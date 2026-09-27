@@ -1,0 +1,28 @@
+{
+  "name": "@i365dev/craftdag-adapter-mesh",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/i365dev/CraftDAG.git",
+    "directory": "packages/adapter-mesh"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@i365dev/craftdag-core": "workspace:*"
+  }
+}
