@@ -41,7 +41,7 @@ const samplePlan = {
 
 describe("Schematic Importer metadata", () => {
   it("reports the current package version", () => {
-    expect(importerVersion).toBe("0.2.4");
+    expect(importerVersion).toBe("0.2.5");
   });
 });
 

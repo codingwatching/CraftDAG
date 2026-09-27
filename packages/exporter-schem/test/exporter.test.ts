@@ -6,7 +6,7 @@ import { exportToSchematic, exporterVersion } from "../src/index.js";
 
 describe("Schematic Exporter", () => {
   it("reports the current package version", () => {
-    expect(exporterVersion).toBe("0.2.5");
+    expect(exporterVersion).toBe("0.2.6");
   });
 
   const mockPlan: VoxelPlan = {
