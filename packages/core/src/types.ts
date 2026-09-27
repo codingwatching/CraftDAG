@@ -165,6 +165,39 @@ export interface CircleRingOptions {
   endAngle?: number;
 }
 
+export interface EllipseRingPlacement {
+  center: { x: number; z: number };
+  y: number;
+  radiusX: number;
+  radiusZ: number;
+}
+
+export interface EllipseRingOptions {
+  thickness?: number;
+  height?: number;
+  fill?: "hollow" | "solid";
+  startAngle?: number;
+  endAngle?: number;
+}
+
+export interface EllipsePath {
+  type: "ellipse";
+  center: { x: number; z: number };
+  radiusX: number;
+  radiusZ: number;
+}
+
+export interface PathRepeatPlacement {
+  path: EllipsePath;
+  source: string;
+  count: number;
+  y: number;
+  startAngle: number;
+  endAngle: number;
+  closed: boolean;
+  orientToTangent?: boolean;
+}
+
 export interface DiagonalBeamPlacement {
   from: { x: number; y: number; z: number };
   to: { x: number; y: number; z: number };
@@ -345,6 +378,7 @@ export interface StairRunOptions {
 export type StairRunComponent = BaseComponentNode<"StairRun", AnchoredComponentPlacement, StairRunOptions>;
 export type LightComponent = BaseComponentNode<"Light", AnchoredComponentPlacement>;
 export type CircleRingComponent = BaseComponentNode<"CircleRing", CircleRingPlacement, CircleRingOptions>;
+export type EllipseRingComponent = BaseComponentNode<"EllipseRing", EllipseRingPlacement, EllipseRingOptions>;
 export interface RectRingOptions {
   bandWidth?: number;
   height?: number;
@@ -356,6 +390,7 @@ export interface RectRingOptions {
 export type RectRingComponent = BaseComponentNode<"RectRing", AnchoredComponentPlacement, RectRingOptions>;
 export type DiagonalBeamComponent = BaseComponentNode<"DiagonalBeam", DiagonalBeamPlacement, DiagonalBeamOptions>;
 export type RadialRepeatComponent = BaseComponentNode<"RadialRepeat", RadialRepeatPlacement>;
+export type PathRepeatComponent = BaseComponentNode<"PathRepeat", PathRepeatPlacement>;
 export type AssetInstanceComponent = BaseComponentNode<"AssetInstance", AssetInstancePlacement>;
 
 export type DoorComponent = BaseComponentNode<"Door", WallAttachmentPlacement>;
@@ -390,6 +425,7 @@ export type AssemblyComponentNode =
   | StairRunComponent
   | LightComponent
   | CircleRingComponent
+  | EllipseRingComponent
   | RectRingComponent
   | DiagonalBeamComponent
   | RadialRepeatComponent
@@ -405,6 +441,7 @@ export type AssemblyComponentNode =
 export type ComponentNode =
   | AssemblyComponentNode
   | InstanceComponent
+  | PathRepeatComponent
   | AssetInstanceComponent;
 
 export interface ComponentAssemblyDefinition {

@@ -503,6 +503,32 @@ const CircleRingComponentSchema = z.object({
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
+const EllipseRingPlacementSchema = z.object({
+  center: z.object({ x: NonNegativeIntSchema, z: NonNegativeIntSchema }).strict(),
+  y: NonNegativeIntSchema,
+  radiusX: PositiveIntSchema,
+  radiusZ: PositiveIntSchema,
+}).strict();
+
+const EllipseRingOptionsSchema = z.object({
+  thickness: PositiveIntSchema.optional(),
+  height: PositiveIntSchema.optional(),
+  fill: z.enum(["hollow", "solid"]).optional(),
+  startAngle: z.number().min(0).max(360).optional(),
+  endAngle: z.number().min(0).max(360).optional(),
+}).strict().optional();
+
+const EllipseRingComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("EllipseRing"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: EllipseRingPlacementSchema,
+  materials: MaterialsSchema,
+  options: EllipseRingOptionsSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
 const DiagonalBeamPlacementSchema = z.object({
   from: z.object({ x: NonNegativeIntSchema, y: NonNegativeIntSchema, z: NonNegativeIntSchema }),
   to: z.object({ x: NonNegativeIntSchema, y: NonNegativeIntSchema, z: NonNegativeIntSchema }),
@@ -538,6 +564,33 @@ const RadialRepeatComponentSchema = z.object({
   role: z.string().min(1).optional(),
   inputs: z.array(ComponentInputSchema).optional(),
   placement: RadialRepeatPlacementSchema,
+  structural: StructuralIntentSchema.optional(),
+}).strict();
+
+const EllipsePathSchema = z.object({
+  type: z.literal("ellipse"),
+  center: z.object({ x: NonNegativeIntSchema, z: NonNegativeIntSchema }).strict(),
+  radiusX: PositiveIntSchema,
+  radiusZ: PositiveIntSchema,
+}).strict();
+
+const PathRepeatPlacementSchema = z.object({
+  path: EllipsePathSchema,
+  source: z.string().min(1),
+  count: PositiveIntSchema,
+  y: NonNegativeIntSchema,
+  startAngle: z.number().min(0).max(360),
+  endAngle: z.number().min(0).max(360),
+  closed: z.boolean(),
+  orientToTangent: z.boolean().optional(),
+}).strict();
+
+const PathRepeatComponentSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("PathRepeat"),
+  role: z.string().min(1).optional(),
+  inputs: z.array(ComponentInputSchema).optional(),
+  placement: PathRepeatPlacementSchema,
   structural: StructuralIntentSchema.optional(),
 }).strict();
 
@@ -577,6 +630,7 @@ const AssemblyComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   LightComponentSchema,
   CircleRingComponentSchema,
+  EllipseRingComponentSchema,
   RectRingComponentSchema,
   DiagonalBeamComponentSchema,
   RadialRepeatComponentSchema,
@@ -612,6 +666,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   StairRunComponentSchema,
   LightComponentSchema,
   CircleRingComponentSchema,
+  EllipseRingComponentSchema,
   RectRingComponentSchema,
   DiagonalBeamComponentSchema,
   RadialRepeatComponentSchema,
@@ -624,6 +679,7 @@ const ComponentNodeSchema = z.discriminatedUnion("type", [
   SupportPostComponentSchema,
   RepeatComponentSchema,
   InstanceComponentSchema,
+  PathRepeatComponentSchema,
   AssetInstanceComponentSchema,
 ]);
 
@@ -811,6 +867,16 @@ export function validateComponentPlan(doc: unknown): ComponentPlanDocument {
 
   validateBudgetPolicy(parsed, componentMap, assemblyMap);
 
+  validatePathRepeatBounds(parsed.components ?? [], parsed.bounds, assemblyMap, parsed.grid?.unitBlocks ?? 1);
+  for (const section of parsed.sections ?? []) {
+    validatePathRepeatBounds(
+      section.components,
+      section.bounds,
+      buildSectionAssemblyMap(assemblyMap, section),
+      parsed.grid?.unitBlocks ?? 1
+    );
+  }
+
   return parsed;
 }
 
@@ -926,12 +992,12 @@ function validateComponentSet(
       if (!inputTarget) {
         throw unknownRefError(component, `inputs ref "${input.ref}"`, input.ref, componentMap);
       }
-      if (inputTarget.type === "Repeat" || inputTarget.type === "Instance" || inputTarget.type === "RadialRepeat") {
+      if (inputTarget.type === "Repeat" || inputTarget.type === "Instance" || inputTarget.type === "RadialRepeat" || inputTarget.type === "PathRepeat") {
         throw componentValidationError({
           code: "INVALID_NON_PHYSICAL_REFERENCE",
           componentId: component.id,
           message: `Component "${component.id}" cannot reference non-physical component "${input.ref}".`,
-          repairHint: "Reference a concrete component instead of Repeat or Instance.",
+          repairHint: "Reference a concrete component instead of Repeat, Instance, RadialRepeat, or PathRepeat.",
         });
       }
     }
@@ -948,6 +1014,28 @@ function validateComponentSet(
 
     if (component.type === "Repeat" && !componentMap.has(component.placement.source)) {
       throw unknownRefError(component, `source "${component.placement.source}"`, component.placement.source, componentMap);
+    }
+
+    if (component.type === "PathRepeat") {
+      validatePathRepeatSemantics(component);
+      if (!assemblyMap.has(component.placement.source)) {
+        throw componentValidationError({
+          code: "UNKNOWN_ASSEMBLY_REF",
+          componentId: component.id,
+          message: `PathRepeat "${component.id}" references unknown source assembly "${component.placement.source}".`,
+          availableRefs: [...assemblyMap.keys()],
+          repairHint: "Set placement.source to an existing reusable assembly ID.",
+        });
+      }
+      if (assemblyMap.get(component.placement.source)?.components.length === 0) {
+        throw componentValidationError({
+          code: "EMPTY_PATH_REPEAT_SOURCE",
+          componentId: component.id,
+          message: `PathRepeat "${component.id}" source assembly "${component.placement.source}" has no components to repeat.`,
+          assemblyId: component.placement.source,
+          repairHint: "Add physical bay components to the source assembly before repeating it.",
+        });
+      }
     }
 
     if (component.type === "Instance") {
@@ -968,6 +1056,10 @@ function validateComponentSet(
 
     if (isAnchoredComponent(component)) {
       validateAnchoredBounds(bounds, component);
+    }
+
+    if (component.type === "EllipseRing") {
+      validateEllipseRingBounds(component, bounds);
     }
 
     validateInteriorLayoutComponent(component);
@@ -1149,12 +1241,16 @@ function expandComponentToNodes(
       }];
     case "CircleRing":
       return expandCircleRing(component, unit, expandInputs(component, componentMap));
+    case "EllipseRing":
+      return expandEllipseRing(component, unit, expandInputs(component, componentMap));
     case "RectRing":
       return expandRectRing(component, componentMap, unit);
     case "DiagonalBeam":
       return expandDiagonalBeam(component, unit, expandInputs(component, componentMap));
     case "RadialRepeat":
       return expandRadialRepeat(component, componentMap, unit, assemblyMap);
+    case "PathRepeat":
+      return expandPathRepeat(component, componentMap, unit, assemblyMap);
     case "AssetInstance": {
       const voxel = assets?.[component.placement.assetId];
       if (!voxel) return [];
@@ -2147,6 +2243,67 @@ function expandCircleRing(
   return nodes;
 }
 
+function expandEllipseRing(
+  component: Extract<ComponentNode, { type: "EllipseRing" }>,
+  unit: 1 | 2,
+  inputs: { ref: string }[]
+): CraftDagNode[] {
+  const { center, y, radiusX, radiusZ } = component.placement;
+  const thickness = (component.options?.thickness ?? 1) * unit;
+  const height = (component.options?.height ?? 1) * unit;
+  const fill = component.options?.fill ?? "hollow";
+  const outerX = radiusX * unit;
+  const outerZ = radiusZ * unit;
+  const innerX = Math.max(0, outerX - thickness);
+  const innerZ = Math.max(0, outerZ - thickness);
+  const start = component.options?.startAngle ?? 0;
+  const end = component.options?.endAngle ?? 360;
+  const block = material(component, "main", "wall");
+  const nodes: CraftDagNode[] = [];
+  let partIndex = 0;
+
+  for (let dy = 0; dy < height; dy += 1) {
+    const blockY = y * unit + dy;
+    for (let dx = -outerX; dx <= outerX; dx += 1) {
+      for (let dz = -outerZ; dz <= outerZ; dz += 1) {
+        if (!insideEllipse(dx, dz, outerX, outerZ)) continue;
+        if (fill === "hollow" && innerX > 0 && innerZ > 0 && insideEllipse(dx, dz, innerX, innerZ)) continue;
+
+        const parameterAngle = normalizeDegrees(Math.atan2(dz / outerZ, dx / outerX) * (180 / Math.PI));
+        if (!angleInArc(parameterAngle, start, end)) continue;
+
+        const bx = center.x * unit + dx;
+        const bz = center.z * unit + dz;
+        nodes.push({
+          id: `${component.id}__ellipse_${partIndex}`,
+          type: "SolidBox",
+          inputs,
+          params: { from: [bx, blockY, bz], to: [bx, blockY, bz], block },
+        });
+        partIndex += 1;
+      }
+    }
+  }
+
+  return nodes;
+}
+
+function insideEllipse(dx: number, dz: number, radiusX: number, radiusZ: number): boolean {
+  const rx2 = radiusX * radiusX;
+  const rz2 = radiusZ * radiusZ;
+  return dx * dx * rz2 + dz * dz * rx2 <= rx2 * rz2;
+}
+
+function normalizeDegrees(angle: number): number {
+  return ((angle % 360) + 360) % 360;
+}
+
+function angleInArc(angle: number, start: number, end: number): boolean {
+  return start <= end
+    ? angle >= start && angle <= end
+    : angle >= start || angle <= end;
+}
+
 function expandDiagonalBeam(
   component: Extract<ComponentNode, { type: "DiagonalBeam" }>,
   unit: 1 | 2,
@@ -2253,6 +2410,82 @@ function expandRadialRepeat(
   return nodes;
 }
 
+function pathRepeatSamples(component: Extract<ComponentNode, { type: "PathRepeat" }>): {
+  x: number;
+  z: number;
+  angle: number;
+  index: number;
+}[] {
+  const { path, count, startAngle, endAngle, closed, orientToTangent } = component.placement;
+  const sweep = closed ? 360 : ellipsePathSweep(startAngle, endAngle);
+  const samples: { x: number; z: number; angle: number; index: number }[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const fraction = closed ? index / count : index / (count - 1);
+    const radians = (startAngle + sweep * fraction) * (Math.PI / 180);
+    const x = Math.round(path.center.x + path.radiusX * Math.cos(radians));
+    const z = Math.round(path.center.z + path.radiusZ * Math.sin(radians));
+    const tangentAngle = Math.atan2(path.radiusZ * Math.cos(radians), -path.radiusX * Math.sin(radians));
+    samples.push({ x, z, angle: orientToTangent ? tangentAngle : 0, index });
+  }
+  return samples;
+}
+
+function expandPathRepeat(
+  component: Extract<ComponentNode, { type: "PathRepeat" }>,
+  componentMap: Map<string, ComponentNode>,
+  unit: 1 | 2,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>
+): CraftDagNode[] {
+  return expandPathRepeatNodes(component, componentMap, unit, assemblyMap);
+}
+
+function expandPathRepeatNodes(
+  component: Extract<ComponentNode, { type: "PathRepeat" }>,
+  componentMap: Map<string, ComponentNode>,
+  unit: 1 | 2,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>
+): CraftDagNode[] {
+  const assembly = assemblyMap.get(component.placement.source);
+  if (!assembly) {
+    throw componentValidationError({
+      code: "UNKNOWN_ASSEMBLY_REF",
+      componentId: component.id,
+      message: `PathRepeat "${component.id}" references unknown source assembly "${component.placement.source}".`,
+      repairHint: "Set placement.source to an existing reusable assembly ID.",
+    });
+  }
+
+  const localComponentMap = buildComponentMap(assembly.components, `Assembly "${assembly.id}"`);
+  const localNodes = assembly.components.flatMap((localComponent) =>
+    expandComponentToNodes(localComponent, localComponentMap, assembly.bounds, unit, assemblyMap)
+  );
+  const localWidth = assembly.bounds.width * unit;
+  const localLength = assembly.bounds.length * unit;
+  const pivotX = (localWidth - 1) / 2;
+  const pivotZ = (localLength - 1) / 2;
+  const externalInputs = expandInputs(component, componentMap);
+  const expanded: CraftDagNode[] = [];
+
+  for (const sample of pathRepeatSamples(component)) {
+    const cloneId = `${component.id}__${assembly.id}_${sample.index}`;
+    const rotatedNodes = localNodes.flatMap((node) =>
+      sample.angle === 0 ? [node] : rotateNodeLocal(node, sample.angle, localWidth, localLength)
+    );
+    const sampleCenterX = sample.x * unit + (unit - 1) / 2;
+    const sampleCenterZ = sample.z * unit + (unit - 1) / 2;
+    const shift: Vec3 = [
+      Math.round(sampleCenterX - pivotX),
+      component.placement.y * unit,
+      Math.round(sampleCenterZ - pivotZ),
+    ];
+    for (const node of rotatedNodes) {
+      expanded.push(namespaceAndShiftNode(node, cloneId, shift, externalInputs));
+    }
+  }
+
+  return expanded;
+}
+
 function unknownRefError(
   component: ComponentNode,
   field: string,
@@ -2284,6 +2517,150 @@ function validateAnchoredBounds(bounds: ComponentSize, component: AnchoredCompon
     });
   }
 }
+
+function validateEllipseRingBounds(
+  component: Extract<ComponentNode, { type: "EllipseRing" }>,
+  bounds: ComponentSize
+): void {
+  const { center, y, radiusX, radiusZ } = component.placement;
+  const height = component.options?.height ?? 1;
+  const minX = center.x - radiusX;
+  const maxX = center.x + radiusX;
+  const minZ = center.z - radiusZ;
+  const maxZ = center.z + radiusZ;
+  if (minX < 0 || maxX >= bounds.width || minZ < 0 || maxZ >= bounds.length || y + height > bounds.height) {
+    throw componentValidationError({
+      code: "ELLIPSE_RING_OUT_OF_BOUNDS",
+      componentId: component.id,
+      message: `EllipseRing "${component.id}" declared ellipse extent x=${minX}..${maxX}, y=${y}..${y + height - 1}, z=${minZ}..${maxZ} exceeds ComponentPlan bounds.`,
+      repairHint: "Move the ellipse center, reduce either radius or height, or increase the plan bounds to contain the full declared ellipse.",
+    });
+  }
+}
+
+function validatePathRepeatSemantics(component: Extract<ComponentNode, { type: "PathRepeat" }>): void {
+  const { startAngle, endAngle, closed, count } = component.placement;
+  const sweep = ellipsePathSweep(startAngle, endAngle);
+  if (closed && sweep !== 360 && startAngle !== endAngle) {
+    throw componentValidationError({
+      code: "INVALID_PATH_REPEAT_ARC",
+      componentId: component.id,
+      message: `PathRepeat "${component.id}" marks an ellipse arc as closed but its angles do not describe a full turn.`,
+      repairHint: "For a closed path, use the same startAngle/endAngle as the phase or retain the legacy 0° to 360° pair; set closed to false for a partial arc.",
+    });
+  }
+  if (!closed && (count < 2 || sweep === 0)) {
+    throw componentValidationError({
+      code: "INVALID_PATH_REPEAT_ARC",
+      componentId: component.id,
+      message: `Open PathRepeat "${component.id}" needs at least two samples over a non-zero ellipse arc.`,
+      repairHint: "Set count to at least 2 and choose distinct startAngle and endAngle values for an open arc.",
+    });
+  }
+}
+
+function ellipsePathSweep(startAngle: number, endAngle: number): number {
+  if (startAngle === endAngle) return 0;
+  return endAngle > startAngle ? endAngle - startAngle : endAngle + 360 - startAngle;
+}
+
+function validatePathRepeatBounds(
+  components: readonly ComponentNode[],
+  bounds: ComponentSize,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>,
+  unit: 1 | 2
+): void {
+  const componentMap = buildComponentMap(components, "ComponentPlan");
+  const blockBounds: Vec3 = [bounds.width * unit, bounds.height * unit, bounds.length * unit];
+
+  for (const component of components) {
+    if (component.type !== "PathRepeat") continue;
+    const { center, radiusX, radiusZ } = component.placement.path;
+    const minX = center.x - radiusX;
+    const maxX = center.x + radiusX;
+    const minZ = center.z - radiusZ;
+    const maxZ = center.z + radiusZ;
+    if (minX < 0 || maxX >= bounds.width || minZ < 0 || maxZ >= bounds.length) {
+      throw componentValidationError({
+        code: "PATH_REPEAT_OUT_OF_BOUNDS",
+        componentId: component.id,
+        message: `PathRepeat "${component.id}" ellipse path extent x=${minX}..${maxX}, z=${minZ}..${maxZ} exceeds ComponentPlan bounds.`,
+        repairHint: "Move the ellipse center, reduce its radius, or increase the plan bounds to contain the full declared path.",
+      });
+    }
+
+    const assembly = assemblyMap.get(component.placement.source)!;
+    const nodes = expandPathRepeatNodes(component, componentMap, unit, assemblyMap);
+    for (const node of nodes) {
+      for (const position of primitiveVoxelPositions(node)) {
+        if (position.some((value, axis) => value < 0 || value >= blockBounds[axis])) {
+          const clonePrefix = `${component.id}__${assembly.id}_`;
+          const indexEnd = node.id.indexOf("__", clonePrefix.length);
+          const index = node.id.startsWith(clonePrefix) && indexEnd >= 0
+            ? node.id.slice(clonePrefix.length, indexEnd)
+            : "unknown";
+          throw componentValidationError({
+            code: "PATH_REPEAT_OUT_OF_BOUNDS",
+            componentId: component.id,
+            assemblyId: assembly.id,
+            instanceId: `${component.id}__${assembly.id}_${index}`,
+            sourceNodeId: node.id,
+            message: `PathRepeat "${component.id}" source "${assembly.id}" sample ${index} emits voxel [${position.join(", ")}] outside ComponentPlan bounds.`,
+            repairHint: "Move the ellipse path inward, reduce the source assembly envelope, or enlarge the plan bounds for the rotated bay.",
+          });
+        }
+      }
+    }
+    validatePathRepeatEnvelope(component, assembly, bounds, unit);
+  }
+}
+
+function validatePathRepeatEnvelope(
+  component: Extract<ComponentNode, { type: "PathRepeat" }>,
+  assembly: ComponentAssemblyDefinition,
+  bounds: ComponentSize,
+  unit: 1 | 2
+): void {
+  const localWidth = assembly.bounds.width * unit;
+  const localHeight = assembly.bounds.height * unit;
+  const localLength = assembly.bounds.length * unit;
+  const shiftY = component.placement.y * unit;
+  const pivotX = (localWidth - 1) / 2;
+  const pivotZ = (localLength - 1) / 2;
+  const blockBounds: Vec3 = [bounds.width * unit, bounds.height * unit, bounds.length * unit];
+
+  for (const sample of pathRepeatSamples(component)) {
+    const centerX = sample.x * unit + (unit - 1) / 2;
+    const centerZ = sample.z * unit + (unit - 1) / 2;
+    const shiftX = Math.round(centerX - pivotX);
+    const shiftZ = Math.round(centerZ - pivotZ);
+    const corners: Vec3[] = [
+      [0, 0, 0],
+      [localWidth - 1, 0, 0],
+      [0, 0, localLength - 1],
+      [localWidth - 1, 0, localLength - 1],
+    ].map(([x, y, z]) => [
+      ...rotateLocalPosition([x, y, z], sample.angle, localWidth, localLength),
+    ] as Vec3).map(([x, y, z]) => [x + shiftX, y, z + shiftZ]);
+    const minX = Math.min(...corners.map(([x]) => x));
+    const maxX = Math.max(...corners.map(([x]) => x));
+    const minY = shiftY;
+    const maxY = shiftY + localHeight - 1;
+    const minZ = Math.min(...corners.map(([, , z]) => z));
+    const maxZ = Math.max(...corners.map(([, , z]) => z));
+    if (minX < 0 || maxX >= blockBounds[0] || minY < 0 || maxY >= blockBounds[1] || minZ < 0 || maxZ >= blockBounds[2]) {
+      throw componentValidationError({
+        code: "PATH_REPEAT_OUT_OF_BOUNDS",
+        componentId: component.id,
+        assemblyId: assembly.id,
+        instanceId: `${component.id}__${assembly.id}_${sample.index}`,
+        message: `PathRepeat "${component.id}" source "${assembly.id}" sample ${sample.index} rotated assembly envelope x=${minX}..${maxX}, y=${minY}..${maxY}, z=${minZ}..${maxZ} exceeds ComponentPlan bounds.`,
+        repairHint: "Move the ellipse path inward, reduce the source assembly envelope, or enlarge the plan bounds for the rotated bay.",
+      });
+    }
+  }
+}
+
 
 function validateInstanceBounds(
   bounds: ComponentSize,
@@ -2854,6 +3231,14 @@ function estimateExpandedComponentCount(
       total += component.placement.count - 1;
       continue;
     }
+    if (component.type === "PathRepeat") {
+      const assembly = assemblyMap.get(component.placement.source);
+      if (assembly) {
+        const localComponentMap = buildComponentMap(assembly.components, `Assembly "${assembly.id}"`);
+        total += component.placement.count * estimateExpandedComponentCount(assembly.components, localComponentMap, assemblyMap);
+      }
+      continue;
+    }
     total += 1;
   }
 
@@ -3015,6 +3400,12 @@ function estimateComponentBlocks(
       const area = fill === "solid" ? Math.PI * r * r : Math.PI * (r * r - Math.max(0, r - t) * Math.max(0, r - t));
       return Math.ceil(area) * h;
     }
+    case "EllipseRing": {
+      const width = component.placement.radiusX * 2 * unit + 1;
+      const length = component.placement.radiusZ * 2 * unit + 1;
+      const height = (component.options?.height ?? 1) * unit;
+      return width * length * height;
+    }
     case "RectRing":
       return rectRingPlacements(component)
         .reduce((total, placement) => total + componentVolume(placement.size) * unit * unit * unit, 0);
@@ -3030,6 +3421,8 @@ function estimateComponentBlocks(
       if (!source) return 0;
       return estimateComponentBlocks(source, componentMap, assemblyMap, bounds, unit) * (component.placement.count - 1);
     }
+    case "PathRepeat":
+      return estimatePathRepeatBlocks(component, assemblyMap, unit);
     case "AssetInstance":
       return 0;
     default: {
@@ -3037,6 +3430,36 @@ function estimateComponentBlocks(
       throw new ValidationError(`Unhandled component type: ${(_exhaustiveCheck as any).type}`);
     }
   }
+}
+
+function estimatePathRepeatBlocks(
+  component: Extract<ComponentNode, { type: "PathRepeat" }>,
+  assemblyMap: Map<string, ComponentAssemblyDefinition>,
+  unit: 1 | 2
+): number {
+  const assembly = assemblyMap.get(component.placement.source);
+  if (!assembly) return 0;
+
+  const localWidth = assembly.bounds.width * unit;
+  const localHeight = assembly.bounds.height * unit;
+  const localLength = assembly.bounds.length * unit;
+  let estimate = 0;
+
+  for (const sample of pathRepeatSamples(component)) {
+    const corners: Vec3[] = ([
+      [0, 0, 0],
+      [localWidth - 1, 0, 0],
+      [0, 0, localLength - 1],
+      [localWidth - 1, 0, localLength - 1],
+    ] as Vec3[]).map((point) => rotateLocalPosition(point, sample.angle, localWidth, localLength));
+    const minX = Math.min(...corners.map((point) => point[0]));
+    const maxX = Math.max(...corners.map((point) => point[0]));
+    const minZ = Math.min(...corners.map((point) => point[2]));
+    const maxZ = Math.max(...corners.map((point) => point[2]));
+    estimate += (maxX - minX + 1) * localHeight * (maxZ - minZ + 1);
+  }
+
+  return estimate;
 }
 
 function componentVolume(size: ComponentSize): number {
@@ -3957,6 +4380,10 @@ function requiredFallbackMaterials(component: ComponentNode): { role: string; va
     case "DiagonalBeam":
     case "RadialRepeat":
       return [{ role: "main", value: "wall" }];
+    case "EllipseRing":
+      return [{ role: "main", value: "wall" }];
+    case "PathRepeat":
+      return [];
     case "RectRing":
       return [{ role: "main", value: "roof" }];
     default: {
@@ -4061,12 +4488,16 @@ function outputPart(component: ComponentNode): string {
       return "repeat";
     case "CircleRing":
       return "ring_0";
+    case "EllipseRing":
+      return "ellipse_0";
     case "RectRing":
       return (component.options?.cornerRise ?? 0) > 0 ? "ring_front_seg0" : "ring_front";
     case "DiagonalBeam":
       return "beam_0_0_0_0";
     case "RadialRepeat":
       return "repeat";
+    case "PathRepeat":
+      return "path_repeat";
     case "Instance":
     case "AssetInstance":
       return "instance";
@@ -4469,18 +4900,7 @@ function rotateNodeLocal(
   localW: number,
   localL: number
 ): CraftDagNode[] {
-  const cos = Math.cos(angle), sin = Math.sin(angle);
-  const cx = (localW - 1) / 2;
-  const cz = (localL - 1) / 2;
-  const rotatePt = (v: [number, number, number]): [number, number, number] => {
-    const dx = v[0] - cx;
-    const dz = v[2] - cz;
-    return [
-      Math.round(cx + dx * cos - dz * sin),
-      v[1],
-      Math.round(cz + dx * sin + dz * cos),
-    ];
-  };
+  const rotatePt = (v: Vec3): Vec3 => rotateLocalPosition(v, angle, localW, localL);
 
   // Quarter turns preserve axis-aligned primitives, so keep the compact node.
   const quarterTurns = Math.round(angle / (Math.PI / 2));
@@ -4543,6 +4963,20 @@ function rotateNodeLocal(
       params: { from: position, to: position, block },
     };
   });
+}
+
+function rotateLocalPosition(position: Vec3, angle: number, localW: number, localL: number): Vec3 {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const centerX = (localW - 1) / 2;
+  const centerZ = (localL - 1) / 2;
+  const dx = position[0] - centerX;
+  const dz = position[2] - centerZ;
+  return [
+    Math.round(centerX + dx * cos - dz * sin),
+    position[1],
+    Math.round(centerZ + dx * sin + dz * cos),
+  ];
 }
 
 function primitiveVoxelPositions(node: CraftDagNode): Vec3[] {
