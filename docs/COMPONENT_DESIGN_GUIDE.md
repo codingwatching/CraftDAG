@@ -69,6 +69,8 @@ Examples:
 - `SteppedTier`
 - `VerticalSetbackVolume`
 - `SteppedDome`
+- `EllipseRing`
+- `PathRepeat`
 - `ArcadeRun`
 - `TreeCanopy`
 - `OrganicPatch`
@@ -78,6 +80,8 @@ Examples:
 - `Instance`
 
 Add a high-level component only when it captures a reusable pattern that agents otherwise express verbosely or incorrectly.
+
+`EllipseRing` captures true bounded oval shells that cannot be represented by stadium caps without changing curvature. `PathRepeat` is deliberately limited to count-based ellipse sampling of a reusable assembly, reusing the existing arbitrary-angle instance rotation machinery. Keep their semantics Minecraft-oriented; do not expand them into a general curve or CAD language.
 
 ## Component admission checklist
 

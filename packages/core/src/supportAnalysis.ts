@@ -407,6 +407,33 @@ function collectStructuralEntryTree(
     return;
   }
 
+  if (component.type === "PathRepeat") {
+    const assembly = assemblyMap.get(component.placement.source);
+    if (!assembly) {
+      return;
+    }
+    const assemblyComponentMap = new Map(assembly.components.map((member) => [member.id, member]));
+    const nestedInherited: InheritedStructuralIntent = {
+      ...inherited,
+      repeatIntent: mergeStructuralIntent(inherited.repeatIntent, component.structural),
+    };
+    for (let index = 0; index < component.placement.count; index += 1) {
+      for (const assemblyComponent of assembly.components) {
+        collectStructuralEntryTree(
+          entries,
+          registeredPrefixes,
+          assemblyComponent,
+          assemblyComponentMap,
+          NO_ASSEMBLIES,
+          `${prefix}__${assembly.id}_${index}__${assemblyComponent.id}`,
+          nestedInherited,
+          depth + 1
+        );
+      }
+    }
+    return;
+  }
+
   if (component.type === "Repeat" || component.type === "RadialRepeat") {
     const source = componentMap.get(component.placement.source);
     if (!source) {

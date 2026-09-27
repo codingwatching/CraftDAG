@@ -23,7 +23,7 @@ Authoring rules
 10. If validation fails, repair the plan instead of loosening schema or validation.
 
 Allowed ComponentPlan components
-Foundation, Platform, Beam, RoomShell, Compartment, Corridor, StairRun, FloorStack, TaperedVolume, SteppedTier, VerticalSetbackVolume, SteppedDome, RailingRun, ArcadeRun, SupportBracket, TreeCanopy, OrganicPatch, PathRun, RockCluster, Light, Door, Window, Opening, Portal, GableRoof, FlatRoof, SupportPost, Repeat, Instance.
+Foundation, Platform, Beam, RoomShell, Compartment, Corridor, StairRun, FloorStack, TaperedVolume, SteppedTier, VerticalSetbackVolume, SteppedDome, RectRing, EllipseRing, PathRepeat, RailingRun, ArcadeRun, SupportBracket, TreeCanopy, OrganicPatch, PathRun, RockCluster, Light, Door, Window, Opening, Portal, GableRoof, FlatRoof, SupportPost, Repeat, Instance.
 
 When to use key components
 - RoomShell: one exterior or interior hollow volume.
@@ -36,6 +36,8 @@ When to use key components
 - SteppedTier: pyramids, amphitheater seating, podiums, terraces.
 - VerticalSetbackVolume: tall towers, pagodas, skyscrapers, spires.
 - SteppedDome: Minecraft-style dome roofs and caps.
+- EllipseRing: true bounded oval shell using integer center and radii.
+- PathRepeat: count-based ellipse path for a reusable assembly; closed paths omit the seam sample, open paths include both endpoints, and orientToTangent aligns local +X.
 - ArcadeRun: repeated blocky arches in facades or bridges.
 - SupportBracket: visible supports under overhangs, balconies, lifeboat shelves.
 - TreeCanopy, OrganicPatch, PathRun, RockCluster: landscape and garden detail.

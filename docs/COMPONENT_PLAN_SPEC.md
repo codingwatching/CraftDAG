@@ -197,6 +197,8 @@ Start with a small component vocabulary:
 - `VerticalSetbackVolume`
 - `SteppedDome`
 - `RectRing`
+- `EllipseRing`
+- `PathRepeat`
 - `RailingRun`
 - `ArcadeRun`
 - `SupportBracket`
@@ -242,6 +244,28 @@ Use `VerticalSetbackVolume` for tall landmark massing with discrete setbacks, su
 Use `SteppedDome` for bounded Minecraft-style dome approximations, such as Taj-style central domes, temple or mosque roofs, observatories, rotundas, and fantasy tower caps. It expands into stacked shrinking tiers inside one anchored box. Use it when the authoring intent is a dome-like roof or cap; use `SteppedTier` for horizontal terraces and `VerticalSetbackVolume` for tall setback towers. Do not add landmark-specific dome component types.
 
 Use `RectRing` for rectangular ring bands around an open interior: eave bands on tiered towers and pagoda-style roofs, cornices, parapets, plinth bands, balcony fascias, and trim frames around courtyards or roof plates. It is the rectangular counterpart to `CircleRing` and expands into at most four axis-aligned band boxes (`ring_front`, `ring_back`, `ring_left`, `ring_right`) inside one anchored bounding box. Use `options.bandWidth` for the inward band thickness and `options.height` for the band height. The band must leave at least a one-block open interior; use `Platform` instead when the surface should be a full slab. Pair it with `SteppedDome` or `CircleRing` for curved caps.
+
+Use `EllipseRing` for bounded oval shells, arenas, courtyards, and curved walls that need true ellipse curvature rather than a stadium approximation. Its integer `placement.center`, `radiusX`, and `radiusZ` define the ellipse on XZ; `placement.y` is the base layer. `options.height` and `options.thickness` default to 1, and `options.fill` defaults to `hollow`. Hollow rings subtract an inner ellipse inset by the thickness on both axes. Optional `startAngle`/`endAngle` select a partial ellipse using the same 0° (+X), increasing-toward-+Z convention as `CircleRing`. Bounds validation uses the full declared ellipse, including for a partial arc. Expansion emits deterministic single-block `SolidBox` nodes and keeps ordinary material, provenance, and support analysis behavior.
+
+Use `PathRepeat` to place one reusable assembly at count-based samples along an ellipse, such as arcade bays or colonnade modules. The source is an assembly ID. The path point aligns with the XZ center of the assembly bounds, rounded to the nearest voxel when the pivot falls between blocks; its local Y coordinates are preserved. `orientToTangent: true` rotates local +X onto the analytic ellipse tangent and uses the existing deterministic integer voxel rotation. It defaults to `false`. The schema is intentionally ellipse-only:
+
+```json
+{
+  "id": "arcade_bays",
+  "type": "PathRepeat",
+  "placement": {
+    "path": { "type": "ellipse", "center": { "x": 36, "z": 20 }, "radiusX": 25, "radiusZ": 13 },
+    "source": "bay_module",
+    "count": 24,
+    "startAngle": 0,
+    "endAngle": 360,
+    "closed": true,
+    "orientToTangent": true
+  }
+}
+```
+
+Closed paths require one full turn and emit `count` samples without a duplicate seam endpoint. Open paths require at least two samples over a non-zero sweep and include both endpoints. If `endAngle` is less than `startAngle`, sampling continues forward through 360°. Angles use the ellipse parameterization `x=cx+radiusX*cos(t)`, `z=cz+radiusZ*sin(t)`. The declared ellipse must fit the plan bounds, and every rotated emitted voxel is checked against those bounds. Block budgeting conservatively sums each rotated source-assembly bounds envelope per sample without discounting overlap. `PathRepeat` supports assemblies only; use `Instance` for one-off placements. It does not support arc-length spacing or general curves.
 
 For stepped eave curvature, set `options.cornerRise` to a small non-negative integer: each corner column gains up to that many extra blocks above `options.height`, stepping down over `options.riseSpan` columns (defaults to `cornerRise`, one block per step) toward the middle of each edge. This approximates curved eave edges and corner uplift with deterministic integer segments named `ring_<side>_seg<n>`; keep the ring's inner hole aligned with the tower cross-section at that height so the band bears on the walls. The placement must declare vertical room (`options.height + options.cornerRise <= placement.size.height`) or validation rejects the plan. Flat rings without `cornerRise` expand exactly as before. Components that consume a cornerRise ring through `inputs` are connected to every emitted segment, preserving whole-ring bearing in the expanded graph.
 
