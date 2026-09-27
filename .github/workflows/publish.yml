@@ -51,12 +51,22 @@ jobs:
           pnpm pack --pack-destination ../../artifacts
           cd ../importer-schem
           pnpm pack --pack-destination ../../artifacts
+          cd ../adapter-mesh
+          pnpm pack --pack-destination ../../artifacts
 
       - name: Publish @i365dev/craftdag-core
         run: |
           TGZ=$(ls ./artifacts/i365dev-craftdag-core-*.tgz | head -1)
           VERSION=$(node -e "const p=require('./packages/core/package.json');console.log(p.version)")
           npm view @i365dev/craftdag-core@$VERSION version >/dev/null 2>&1 \
+            && echo "Version $VERSION already published, skipping" \
+            || npm publish "$TGZ" --access public
+
+      - name: Publish @i365dev/craftdag-adapter-mesh
+        run: |
+          TGZ=$(ls ./artifacts/i365dev-craftdag-adapter-mesh-*.tgz | head -1)
+          VERSION=$(node -e "const p=require('./packages/adapter-mesh/package.json');console.log(p.version)")
+          npm view @i365dev/craftdag-adapter-mesh@$VERSION version >/dev/null 2>&1 \
             && echo "Version $VERSION already published, skipping" \
             || npm publish "$TGZ" --access public
 
