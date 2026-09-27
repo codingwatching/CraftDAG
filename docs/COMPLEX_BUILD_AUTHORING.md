@@ -74,7 +74,7 @@ builds/<build-id>/mesh/
 
 The source/script is the source of truth. Treat OBJ and VoxelPlan as generated artifacts. Preserve generated OBJ and evidence with a review when they are needed to reproduce a production result; do not commit large generated geometry as an unrelated CraftDAG benchmark.
 
-Pin the Blender or procedural-tool version, generator dependencies, seed, coordinate convention, scale, and export settings. The same committed source and settings must regenerate the same OBJ bytes. Do not rely on GUI state, ambient scene objects, current selection, machine-specific paths, or unseeded randomness.
+Pin the Blender or procedural-tool version, generator dependencies, seed, coordinate convention, scale, and export settings. Code-native and procedural exporters SHOULD produce byte-stable OBJ where practical. Some upstream producers, including Blender exports, may vary raw OBJ serialization order while preserving the same geometry; for those producers, raw OBJ byte identity is not a hard invariant. Use canonical/normalized geometry equivalence, or a canonical geometry hash when an existing tool provides one, to compare geometry. Do not rely on GUI state, ambient scene objects, current selection, machine-specific paths, or unseeded randomness.
 
 ### Convert OBJ reproducibly
 
@@ -98,7 +98,7 @@ const plan = objToVoxelPlan(objText, {
 
 Choose the smallest `targetHeight` that preserves the required silhouette. Start around 32 or 64 blocks high and compare a preview; increase resolution only when a named important feature disappears. `maxBlocks` is a hard cap on both normalized bounding-box volume and occupied blocks, so choose it from the MinePilot build budget and pass it explicitly. Use `surface` for open meshes and thin shells, including organic forms where a solid fill fuses limbs or wings. Use `solid` only for a bounded, closed mesh when the filled interior is wanted. The adapter uses one explicit `defaultBlock`; OBJ materials, groups, transforms, and textures are not carried through.
 
-Run the complete source generator and voxelizer twice from a clean checkout. Compare source hashes, OBJ hashes, and VoxelPlan hashes; byte differences are a reproducibility failure to investigate, not something to hand-edit in the OBJ. Hash the exact source files and exact output bytes with SHA-256. Record the command, tool and adapter versions, seed, all conversion options, `plan.size`, `plan.blocks.length`, and all three hashes in `evidence.json`.
+Run the complete source generator and voxelizer twice from a clean checkout using the pinned source, toolchain, and options. The final normalized VoxelPlan MUST be deterministic. Compare source hashes, geometry equivalence (or canonical geometry hashes when available), and VoxelPlan hashes/output. Record the raw OBJ SHA-256 as provenance whenever an OBJ is produced; a changed raw OBJ hash alone does not invalidate a run when canonical geometry is equivalent and the final VoxelPlan remains deterministic. Hash the exact source files and exact VoxelPlan output bytes with SHA-256. Record the command, tool and adapter versions, seed, all conversion options, `plan.size`, `plan.blocks.length`, source and VoxelPlan hashes, raw OBJ hash, and any available canonical geometry hash in `evidence.json`.
 
 ### Review and repair
 
