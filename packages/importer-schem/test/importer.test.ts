@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { exportToSchematic } from "../../exporter-schem/src/index.js";
-import { importFromSchematic } from "../src/index.js";
+import { importFromSchematic, importerVersion } from "../src/index.js";
 import { compileComponentPlan } from "../../core/src/index.js";
 
 const samplePlan = {
@@ -38,6 +38,12 @@ const samplePlan = {
     },
   ],
 };
+
+describe("Schematic Importer metadata", () => {
+  it("reports the current package version", () => {
+    expect(importerVersion).toBe("0.2.4");
+  });
+});
 
 describe("schematic importer", () => {
   it("round-trips export → import with matching block count", () => {

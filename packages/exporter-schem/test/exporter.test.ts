@@ -2,9 +2,13 @@ import zlib from "zlib";
 import nbt from "prismarine-nbt";
 import { describe, it, expect } from "vitest";
 import { VoxelPlan } from "@i365dev/craftdag-core";
-import { exportToSchematic } from "../src/index.js";
+import { exportToSchematic, exporterVersion } from "../src/index.js";
 
 describe("Schematic Exporter", () => {
+  it("reports the current package version", () => {
+    expect(exporterVersion).toBe("0.2.5");
+  });
+
   const mockPlan: VoxelPlan = {
     version: "0.1",
     name: "Tiny House",
