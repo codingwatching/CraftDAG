@@ -335,4 +335,4 @@ export function importFromSchematic(schematicBuffer: Buffer, options?: ImportOpt
   };
 }
 
-export const importerVersion = "0.2.5";
+export const importerVersion = "0.2.6";

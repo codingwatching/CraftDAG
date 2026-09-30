@@ -99,7 +99,7 @@ function makeSchematic(size: [number, number, number], blockData: number[] = [0]
 
 describe("Schematic Importer metadata", () => {
   it("reports the current package version", () => {
-    expect(importerVersion).toBe("0.2.5");
+    expect(importerVersion).toBe("0.2.6");
   });
 });
 
